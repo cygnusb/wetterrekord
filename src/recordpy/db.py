@@ -23,6 +23,15 @@ CREATE TABLE IF NOT EXISTS daily_records (
     record_date TEXT NOT NULL,
     PRIMARY KEY (station_id, month, day, kind)
 );
+CREATE TABLE IF NOT EXISTS quinzaine_records (
+    station_id TEXT NOT NULL,
+    month INTEGER NOT NULL,
+    half INTEGER NOT NULL CHECK (half IN (1, 2)),
+    kind TEXT NOT NULL CHECK (kind IN ('high', 'low')),
+    value REAL NOT NULL,
+    record_date TEXT NOT NULL,
+    PRIMARY KEY (station_id, month, half, kind)
+);
 CREATE TABLE IF NOT EXISTS monthly_records (
     station_id TEXT NOT NULL,
     month INTEGER NOT NULL,

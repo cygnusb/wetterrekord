@@ -3,30 +3,77 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>recordpy.de — Temperaturrekorde Deutschland</title>
+<title>Temperaturrekorde Deutschland heute – Live-Karte | recordpy.de</title>
+<meta name="description" content="Live-Karte der Temperaturrekorde in Deutschland: Welche Wetterstation bricht heute ihren Hitze- oder Kälterekord? Tages-, Halbmonats-, Monats- und Allzeitrekorde von über 330 DWD-Stationen, alle 15 Minuten aktualisiert.">
+<link rel="canonical" href="{{BASE_URL}}/">
+<meta property="og:type" content="website">
+<meta property="og:title" content="Temperaturrekorde Deutschland heute – Live-Karte">
+<meta property="og:description" content="Welche Wetterstation bricht heute ihren Temperaturrekord? Live-Vergleich der aktuellen Temperaturen mit historischen DWD-Rekorden seit dem 19. Jahrhundert.">
+<meta property="og:url" content="{{BASE_URL}}/">
+<meta property="og:locale" content="de_DE">
+<meta name="twitter:card" content="summary">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Ctext y='13' font-size='13'%3E🌡%3C/text%3E%3C/svg%3E">
+<link rel="preconnect" href="https://basemaps.cartocdn.com">
+<link rel="preconnect" href="https://unpkg.com">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <link rel="stylesheet" href="style.css">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "WebSite",
+  "name": "recordpy.de – Temperaturrekorde Deutschland",
+  "url": "{{BASE_URL}}/",
+  "description": "Live-Karte der Temperaturrekorde in Deutschland auf Basis von DWD Open Data",
+  "inLanguage": "de"
+}
+</script>
 </head>
 <body>
 <header>
-  <h1>record<span class="accent">py</span>.de</h1>
-  <p class="subtitle">Temperaturrekorde Deutschland — live</p>
+  <h1>record<span class="accent">py</span>.de <span class="claim">— Temperaturrekorde Deutschland live</span></h1>
+  <div id="stats" class="stats"></div>
   <div class="controls">
     <div class="mode-toggle">
       <button id="mode-heat" class="active">🔥 Hitze</button>
       <button id="mode-cold">❄️ Kälte</button>
     </div>
+    <div class="mode-toggle">
+      <button id="view-map" class="active">Karte</button>
+      <button id="view-table">Tabelle</button>
+    </div>
     <select id="filter-land"><option value="">Alle Bundesländer</option></select>
     <label>Höhe ≤ <input type="number" id="filter-alt" placeholder="∞" min="0" step="100"> m</label>
+    <select id="filter-age">
+      <option value="">Rekordalter: egal</option>
+      <option value="10">Tagesrekord ≥ 10 Jahre</option>
+      <option value="30">Tagesrekord ≥ 30 Jahre</option>
+      <option value="50">Tagesrekord ≥ 50 Jahre</option>
+    </select>
   </div>
   <div class="legend" id="legend"></div>
 </header>
 <div id="map"></div>
+<div id="table-view" class="hidden"><table id="stations-table"></table></div>
 <aside id="panel" class="hidden">
   <button id="panel-close">×</button>
   <div id="panel-content"></div>
 </aside>
+<section id="about">
+  <h2>Was zeigt diese Seite?</h2>
+  <p>Diese Live-Karte vergleicht die aktuellen Temperaturen an über 330 Wetterstationen
+  des Deutschen Wetterdienstes (DWD) mit den historischen Rekorden der jeweiligen Station —
+  viele Messreihen reichen bis ins 19. Jahrhundert zurück. Für jede Station wird geprüft, ob
+  das heutige Maximum bzw. Minimum den <strong>Tagesrekord</strong> (gleicher Kalendertag),
+  den <strong>Halbmonats-</strong> oder <strong>Monatsrekord</strong> oder sogar den
+  <strong>Allzeitrekord</strong> bricht oder ihm nahekommt.</p>
+  <p>Berücksichtigt werden nur Stationen mit mindestens 30 Jahren Messhistorie. Die
+  Live-Werte stammen aus den 10-Minuten-Daten des DWD (etwa 30 Minuten Verzögerung) und
+  werden alle 15 Minuten aktualisiert. Datenbasis: <a
+  href="https://opendata.dwd.de/climate_environment/CDC/" rel="noopener">Deutscher
+  Wetterdienst, CDC Open Data</a>. Inspiriert von <a href="https://recordpy.fr"
+  rel="noopener">recordpy.fr</a>. Quellcode auf <a
+  href="https://github.com/cygnusb/recordpy.de" rel="noopener">GitHub</a>.</p>
+</section>
 <footer>
   Datenbasis: <a href="https://opendata.dwd.de/" target="_blank" rel="noopener">Deutscher Wetterdienst</a> (CDC Open Data),
   Werte ~30 min verzögert · Stand: <span id="generated-at">–</span>

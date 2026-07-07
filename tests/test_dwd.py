@@ -8,7 +8,7 @@ from recordpy.dwd import (
     parse_station_list,
     read_zip_member,
 )
-from recordpy.records import compute_records
+from recordpy.records import compute_records, quinzaine_of
 
 FIXTURES = Path(__file__).parent / "fixtures"
 
@@ -61,3 +61,45 @@ def test_compute_records():
     assert r.monthly_high[7].value == 32.0
     assert r.alltime_high.value == 32.0
     assert r.alltime_low.value == -10.0
+
+
+def test_quinzaine_boundaries():
+    assert quinzaine_of(date(2026, 7, 1)) == (7, 1)
+    assert quinzaine_of(date(2026, 7, 15)) == (7, 1)
+    assert quinzaine_of(date(2026, 7, 16)) == (7, 2)
+    assert quinzaine_of(date(2026, 2, 28)) == (2, 2)
+
+
+def test_quinzaine_records():
+    values = [
+        DailyValue(date(2000, 7, 7), tmax=30.0, tmin=15.0),
+        DailyValue(date(2001, 7, 14), tmax=33.0, tmin=12.0),
+        DailyValue(date(2001, 7, 20), tmax=36.0, tmin=18.0),
+    ]
+    r = compute_records(values)
+    assert r.quinzaine_high[(7, 1)].value == 33.0
+    assert r.quinzaine_high[(7, 2)].value == 36.0
+    assert r.quinzaine_low[(7, 1)].value == 12.0
+    assert r.monthly_high[7].value == 36.0
+
+
+def test_status_levels():
+    from recordpy.app import _status
+
+    records = {
+        "day": {"value": 30.0, "date": "1990-07-07"},
+        "quinzaine": {"value": 32.0, "date": "1995-07-10"},
+        "month": {"value": 34.0, "date": "2003-07-20"},
+        "alltime": {"value": 38.0, "date": "2019-07-25"},
+    }
+    assert _status(None, records, "heat") == {"level": None, "near": None}
+    assert _status(29.5, records, "heat") == {"level": None, "near": "day"}
+    assert _status(30.0, records, "heat")["level"] == "day"
+    assert _status(32.5, records, "heat")["level"] == "quinzaine"
+    assert _status(33.5, records, "heat") == {"level": "quinzaine", "near": "month"}
+    assert _status(34.5, records, "heat")["level"] == "month"
+    assert _status(38.2, records, "heat")["level"] == "alltime"
+    # cold: lower values break records
+    cold = {"day": {"value": 5.0, "date": "1985-07-07"}, "alltime": {"value": -20.0, "date": "1987-01-12"}}
+    assert _status(4.0, cold, "cold")["level"] == "day"
+    assert _status(5.8, cold, "cold") == {"level": None, "near": "day"}

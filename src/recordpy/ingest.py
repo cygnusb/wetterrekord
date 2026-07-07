@@ -59,6 +59,16 @@ def store_station(
                 "INSERT OR REPLACE INTO daily_records VALUES (?,?,?,?,?,?)",
                 (station.id, month, day, "low", rec.value, rec.record_date.isoformat()),
             )
+        for (month, half), rec in records.quinzaine_high.items():
+            conn.execute(
+                "INSERT OR REPLACE INTO quinzaine_records VALUES (?,?,?,?,?,?)",
+                (station.id, month, half, "high", rec.value, rec.record_date.isoformat()),
+            )
+        for (month, half), rec in records.quinzaine_low.items():
+            conn.execute(
+                "INSERT OR REPLACE INTO quinzaine_records VALUES (?,?,?,?,?,?)",
+                (station.id, month, half, "low", rec.value, rec.record_date.isoformat()),
+            )
         for month, rec in records.monthly_high.items():
             conn.execute(
                 "INSERT OR REPLACE INTO monthly_records VALUES (?,?,?,?,?)",

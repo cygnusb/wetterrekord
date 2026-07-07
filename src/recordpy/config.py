@@ -21,6 +21,9 @@ NEAR_RECORD_DELTA = 1.0
 
 LOCAL_TZ = "Europe/Berlin"
 
+# Public base URL, used for canonical link, sitemap and Open Graph tags.
+BASE_URL = os.environ.get("RECORDPY_BASE_URL", "https://recordpy.w359.de").rstrip("/")
+
 DOWNLOAD_CONCURRENCY = 4
 LIVE_POLL_MINUTES = int(os.environ.get("RECORDPY_LIVE_POLL_MINUTES", "15"))
 # The DWD updates daily/kl recent only once per day — a daily ingest is
