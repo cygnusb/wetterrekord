@@ -250,7 +250,64 @@ def api_station_detail(station_id: str):
 @app.api_route("/", methods=["GET", "HEAD"], response_class=HTMLResponse)
 def index():
     html = (STATIC_DIR / "index.html").read_text(encoding="utf-8")
-    return html.replace("{{BASE_URL}}", config.BASE_URL)
+    imprint_link = (
+        '<a href="impressum">Impressum &amp; Datenschutz</a> · ' if config.IMPRINT_HTML else ""
+    )
+    return html.replace("{{BASE_URL}}", config.BASE_URL).replace(
+        "{{IMPRINT_LINK}}", imprint_link
+    )
+
+
+IMPRINT_PAGE = """<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Impressum &amp; Datenschutz | recordpy.de</title>
+<style>
+body {{ background: #14181f; color: #e8e8e8; font-family: -apple-system, "Segoe UI", Roboto, sans-serif;
+       max-width: 46rem; margin: 0 auto; padding: 24px 16px; line-height: 1.6; font-size: 0.95rem; }}
+h1 {{ font-size: 1.4rem; }} h2 {{ font-size: 1.1rem; margin-top: 2em; }}
+a {{ color: #8ab4f8; }}
+</style>
+</head>
+<body>
+<p><a href="./">&larr; zurück zur Karte</a></p>
+<h1>Impressum</h1>
+{imprint}
+<h2>Datenschutzerklärung</h2>
+<p>Verantwortlich für die Datenverarbeitung auf dieser Website ist der oben im
+Impressum genannte Betreiber.</p>
+<p><strong>Server-Logfiles:</strong> Beim Aufruf dieser Website speichert der
+Webserver automatisch Zugriffsdaten (IP-Adresse, Zeitpunkt, aufgerufene URL,
+User-Agent). Diese Daten dienen ausschließlich dem technischen Betrieb und der
+Fehleranalyse (Art. 6 Abs. 1 lit. f DSGVO) und werden nach kurzer Zeit
+gelöscht.</p>
+<p><strong>Cookies und Tracking:</strong> Diese Website verwendet keine Cookies
+und kein Tracking. Im lokalen Speicher des Browsers wird lediglich ein
+technisches Merkmal ohne Personenbezug abgelegt (ob der Einführungstext bereits
+angezeigt wurde).</p>
+<p><strong>Externe Inhalte:</strong> Die Kartendarstellung lädt Kartenkacheln
+von CARTO (auf Basis von OpenStreetMap) sowie die Bibliothek Leaflet vom
+CDN unpkg.com. Dabei wird Ihre IP-Adresse an die jeweiligen Anbieter
+übertragen.</p>
+<p><strong>Datenquelle:</strong> Die dargestellten Wetterdaten stammen vom
+Deutschen Wetterdienst (DWD, CDC Open Data) und enthalten keine
+personenbezogenen Daten.</p>
+<p><strong>Ihre Rechte:</strong> Sie haben nach der DSGVO das Recht auf
+Auskunft, Berichtigung, Löschung, Einschränkung der Verarbeitung, Widerspruch
+und Datenübertragbarkeit sowie das Recht auf Beschwerde bei einer
+Datenschutz-Aufsichtsbehörde.</p>
+</body>
+</html>
+"""
+
+
+@app.api_route("/impressum", methods=["GET", "HEAD"], response_class=HTMLResponse)
+def impressum():
+    if not config.IMPRINT_HTML:
+        raise HTTPException(status_code=404, detail="not configured")
+    return IMPRINT_PAGE.format(imprint=config.IMPRINT_HTML)
 
 
 @app.api_route("/robots.txt", methods=["GET", "HEAD"], response_class=PlainTextResponse)

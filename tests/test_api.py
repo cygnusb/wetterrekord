@@ -2,8 +2,10 @@ from datetime import datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
 
-from recordpy import db
-from recordpy.app import past_values
+from starlette.testclient import TestClient
+
+from recordpy import config, db
+from recordpy.app import app, past_values
 
 TZ = ZoneInfo("Europe/Berlin")
 
@@ -28,3 +30,26 @@ def test_past_values_aggregation(tmp_path: Path):
     assert last_ts == "2026-07-08T12:00:00+02:00"
     assert values["00002"][0] == 22.2
     assert "00003" not in values
+
+
+def _client():
+    # no lifespan: the imprint/index routes need no DB or scheduler
+    return TestClient(app)
+
+
+def test_imprint_hidden_when_unconfigured(monkeypatch):
+    monkeypatch.setattr(config, "IMPRINT_HTML", "")
+    client = _client()
+    assert client.get("/impressum").status_code == 404
+    assert "Impressum" not in client.get("/").text
+
+
+def test_imprint_shown_when_configured(monkeypatch):
+    monkeypatch.setattr(config, "IMPRINT_HTML", "<p>Cygnus Networks GmbH</p>")
+    client = _client()
+    page = client.get("/impressum")
+    assert page.status_code == 200
+    assert "Cygnus Networks GmbH" in page.text
+    assert "Datenschutzerklärung" in page.text
+    index = client.get("/").text
+    assert '<a href="impressum">' in index

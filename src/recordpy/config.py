@@ -24,6 +24,10 @@ LOCAL_TZ = "Europe/Berlin"
 # Public base URL, used for canonical link, sitemap and Open Graph tags.
 BASE_URL = os.environ.get("RECORDPY_BASE_URL", "https://recordpy.w359.de").rstrip("/")
 
+# HTML fragment with the site operator's imprint (legal notice). The imprint/
+# privacy page and its footer link only appear when this is set.
+IMPRINT_HTML = os.environ.get("RECORDPY_IMPRINT_HTML", "")
+
 DOWNLOAD_CONCURRENCY = 4
 LIVE_POLL_MINUTES = int(os.environ.get("RECORDPY_LIVE_POLL_MINUTES", "15"))
 # The DWD updates daily/kl recent only once per day — a daily ingest is

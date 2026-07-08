@@ -1,5 +1,7 @@
 # recordpy.de
 
+**➡️ Live: [https://recordpy.de](https://recordpy.de)**
+
 [![CI](https://github.com/cygnusb/recordpy.de/actions/workflows/ci.yml/badge.svg)](https://github.com/cygnusb/recordpy.de/actions/workflows/ci.yml)
 [![GHCR](https://img.shields.io/badge/ghcr.io-cygnusb%2Frecordpy.de-blue?logo=github)](https://github.com/cygnusb/recordpy.de/pkgs/container/recordpy.de)
 [![Docker Hub](https://img.shields.io/docker/pulls/cygnusbn/recordpy.de?logo=docker)](https://hub.docker.com/r/cygnusbn/recordpy.de)
@@ -35,6 +37,15 @@ Two scheduler jobs run inside the container:
   updates the `daily/kl` recent data only once per day.
 
 Prebuilt images: `ghcr.io/cygnusb/recordpy.de` and `cygnusbn/recordpy.de` (Docker Hub).
+
+### Configuration
+
+| Variable | Default | Purpose |
+|---|---|---|
+| `RECORDPY_BASE_URL` | `https://recordpy.w359.de` | public base URL (canonical link, sitemap, OG tags) |
+| `RECORDPY_IMPRINT_HTML` | *(unset)* | HTML fragment with the operator's legal notice; the `/impressum` page (imprint + privacy policy, German) and its footer link only appear when set |
+| `RECORDPY_LIVE_POLL_MINUTES` | `15` | live poll interval |
+| `RECORDPY_INGEST_HOUR` | `4` | daily record recomputation hour (local time) |
 
 ## Running without Docker
 
