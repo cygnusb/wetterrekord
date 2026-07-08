@@ -1,6 +1,6 @@
 [project]
 name = "wetterrekord"
-version = "0.5.1"
+version = "0.6.0"
 description = "Temperature records in Germany — live map based on DWD open data"
 readme = "README.md"
 authors = [
@@ -11,6 +11,7 @@ dependencies = [
     "apscheduler>=3.11.3",
     "fastapi>=0.139.0",
     "httpx>=0.28.1",
+    "pillow>=12.3.0",
     "uvicorn[standard]>=0.50.2",
 ]
 

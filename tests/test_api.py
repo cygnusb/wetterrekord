@@ -53,3 +53,43 @@ def test_imprint_shown_when_configured(monkeypatch):
     assert "Datenschutzerklärung" in page.text
     index = client.get("/").text
     assert '<a href="impressum">' in index
+
+
+def _st(name, lon, lat, tmax, tmin, heat_level=None, heat_near=None):
+    return {
+        "id": name, "name": name, "bundesland": "Hessen", "lat": lat, "lon": lon,
+        "altitude": 100, "first_year": 1950, "tmax_today": tmax, "tmin_today": tmin,
+        "last_measurement": None,
+        "records": {"high": {}, "low": {}},
+        "heat": {"level": heat_level, "near": heat_near},
+        "cold": {"level": None, "near": None},
+    }
+
+
+def test_og_image_render():
+    from wetterrekord import ogimage
+
+    data = {
+        "date": "2026-07-08",
+        "stations": [
+            _st("Frankfurt", 8.6, 50.1, 38.2, 21.0, heat_level="day"),
+            _st("Kassel", 9.4, 51.3, 31.0, 15.0, heat_near="day"),
+            _st("Fulda", 9.7, 50.5, 25.0, 12.0),
+            _st("Offline", 8.0, 49.8, None, None),
+        ],
+    }
+    png = ogimage.render(data)
+    assert png[:8] == b"\x89PNG\r\n\x1a\n"
+
+
+def test_og_image_endpoint(tmp_path, monkeypatch):
+    from wetterrekord import app as appmod
+
+    monkeypatch.setattr(appmod, "conn", db.connect(tmp_path / "og.sqlite"))
+    monkeypatch.setattr(appmod, "_og_cache", None)
+    client = _client()
+    resp = client.get("/og-image.png")
+    assert resp.status_code == 200
+    assert resp.headers["content-type"] == "image/png"
+    assert resp.content[:8] == b"\x89PNG\r\n\x1a\n"
+    assert client.head("/og-image.png").status_code == 200

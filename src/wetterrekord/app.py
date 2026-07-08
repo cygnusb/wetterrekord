@@ -3,6 +3,7 @@
 import importlib.metadata
 import logging
 import sqlite3
+import time
 from contextlib import asynccontextmanager
 from datetime import datetime
 from pathlib import Path
@@ -13,7 +14,7 @@ from fastapi import FastAPI, HTTPException, Response
 from fastapi.responses import HTMLResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 
-from . import config, db, ingest, live
+from . import config, db, ingest, live, ogimage
 
 log = logging.getLogger(__name__)
 
@@ -249,6 +250,24 @@ def api_station_detail(station_id: str):
         "alltime_records": alltime,
         "live": dict(lr) if lr else None,
     }
+
+
+# The OG image is rendered from the live records so shared links show the
+# current day. Cached for the live-poll interval; the route shadows the
+# StaticFiles mount, so no static og-image.png must exist.
+_og_cache: tuple[float, bytes] | None = None
+
+
+@app.api_route("/og-image.png", methods=["GET", "HEAD"])
+def og_image():
+    global _og_cache
+    if _og_cache is None or time.time() - _og_cache[0] > config.LIVE_POLL_MINUTES * 60:
+        _og_cache = (time.time(), ogimage.render(api_stations()))
+    return Response(
+        content=_og_cache[1],
+        media_type="image/png",
+        headers={"Cache-Control": f"public, max-age={config.LIVE_POLL_MINUTES * 60}"},
+    )
 
 
 # methods must include HEAD explicitly: FastAPI's @app.get registers GET only,

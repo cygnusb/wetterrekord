@@ -24,6 +24,8 @@ let markers = new Map();
 let sortKey = "recordAge";
 let sortDir = -1;
 let timelineOffset = 0; // 0 = jetzt, negative Schritte à 30 min
+// "nur Rekorde" gilt pro Ansicht: Tabelle standardmäßig an, Karte aus
+const recordsOnly = { map: false, table: true };
 
 const map = L.map("map", { zoomSnap: 0.5 }).setView([51.2, 10.3], 6);
 L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
@@ -144,16 +146,29 @@ function renderStats() {
 }
 
 // ---- Karte ----
+function tempLabel(st) {
+  const v = stToday(st);
+  return v === null || v === undefined ? "" : v.toFixed(1).replace(".", ",") + "°";
+}
 function renderMap() {
   const c = levelColors();
   for (const st of stations) {
     const m = markers.get(st.id);
-    if (view !== "map" || !passesFilter(st)) {
+    const info = statusInfo(st);
+    const hideNonRecord = recordsOnly.map && !["broken", "near"].includes(info.type);
+    if (view !== "map" || !passesFilter(st) || hideNonRecord) {
+      m.unbindTooltip();
       map.removeLayer(m);
       continue;
     }
     if (!map.hasLayer(m)) m.addTo(map);
-    const info = statusInfo(st);
+    // im Nur-Rekorde-Modus den Messwert direkt an der Station anzeigen
+    m.unbindTooltip();
+    if (recordsOnly.map) {
+      m.bindTooltip(tempLabel(st), {
+        permanent: true, direction: "top", offset: [0, -6], className: "temp-label",
+      });
+    }
     if (info.type === "broken") {
       m.setStyle({ fillColor: c[info.level], fillOpacity: 0.95, color: "#0b0e13", weight: 1, radius: 7 });
       m.bringToFront();
@@ -187,7 +202,7 @@ const LEVEL_ORDER = { alltime: 0, month: 1, quinzaine: 2, day: 3, null: 4 };
 
 function renderTable() {
   let rows = filtered();
-  if (document.getElementById("filter-records").checked) {
+  if (recordsOnly.table) {
     rows = rows.filter((st) => ["broken", "near"].includes(statusInfo(st).type));
   }
   rows = rows.slice().sort((a, b) => {
@@ -276,7 +291,7 @@ function renderLegend() {
 function render() {
   document.getElementById("map").classList.toggle("hidden", view !== "map");
   document.getElementById("table-view").classList.toggle("hidden", view !== "table");
-  document.getElementById("filter-records-label").classList.toggle("hidden", view !== "table");
+  document.getElementById("filter-records").checked = recordsOnly[view];
   renderStats();
   renderLegend();
   if (view === "map") renderMap();
@@ -347,9 +362,13 @@ document.getElementById("view-map").addEventListener("click", () => {
 document.getElementById("view-table").addEventListener("click", () => {
   view = "table"; setToggle(["view-map", "view-table"], "view-table"); render();
 });
-for (const id of ["filter-land", "filter-age", "filter-records"]) {
+for (const id of ["filter-land", "filter-age"]) {
   document.getElementById(id).addEventListener("change", render);
 }
+document.getElementById("filter-records").addEventListener("change", (ev) => {
+  recordsOnly[view] = ev.target.checked;
+  render();
+});
 document.getElementById("filter-alt").addEventListener("input", render);
 document.getElementById("panel-close").addEventListener("click", () =>
   document.getElementById("panel").classList.add("hidden")
