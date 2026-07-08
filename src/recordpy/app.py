@@ -108,17 +108,52 @@ def _status(
     return result
 
 
+def past_values(db_conn: sqlite3.Connection, at: datetime) -> dict[str, tuple]:
+    """Per-station (tmax, tmin, last ts) from stored measurements between the
+    local start of `at`'s day and `at`."""
+    day_start = at.replace(hour=0, minute=0, second=0, microsecond=0)
+    return {
+        r["station_id"]: (r["mx"], r["mn"], r["last_ts"])
+        for r in db_conn.execute(
+            "SELECT station_id, MAX(tt) mx, MIN(tt) mn, MAX(ts) last_ts"
+            " FROM measurements WHERE ts >= ? AND ts <= ? GROUP BY station_id",
+            (day_start.isoformat(), at.isoformat()),
+        )
+    }
+
+
 @app.get("/api/stations")
-def api_stations():
-    now_local = datetime.now(ZoneInfo(config.LOCAL_TZ))
-    today = now_local.date()
-    month, day = today.month, today.day
+def api_stations(at: str | None = None):
+    tz = ZoneInfo(config.LOCAL_TZ)
+    now_local = datetime.now(tz)
+    if at is not None:
+        try:
+            at_dt = datetime.fromisoformat(at)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="invalid 'at' timestamp")
+        if at_dt.tzinfo is None:
+            at_dt = at_dt.replace(tzinfo=tz)
+        # normalize to local time: the local calendar day decides which
+        # daily/half-month records apply and where the day starts
+        at_dt = at_dt.astimezone(tz)
+        if at_dt > now_local:
+            raise HTTPException(status_code=400, detail="'at' must not be in the future")
+        values = past_values(conn, at_dt)
+        target_date = at_dt.date()
+        generated_at = at_dt
+    else:
+        target_date = now_local.date()
+        generated_at = now_local
+        values = {
+            r["station_id"]: (r["tmax_today"], r["tmin_today"], r["last_measurement_at"])
+            for r in conn.execute(
+                "SELECT * FROM live_state WHERE date = ?", (target_date.isoformat(),)
+            )
+        }
+
+    month, day = target_date.month, target_date.day
     half = 1 if day <= 15 else 2
 
-    live_rows = {
-        r["station_id"]: r
-        for r in conn.execute("SELECT * FROM live_state WHERE date = ?", (today.isoformat(),))
-    }
     daily = {
         (r["station_id"], r["kind"]): r
         for r in conn.execute(
@@ -142,9 +177,7 @@ def api_stations():
     stations = []
     for s in conn.execute("SELECT * FROM stations"):
         sid = s["id"]
-        lr = live_rows.get(sid)
-        tmax_today = lr["tmax_today"] if lr else None
-        tmin_today = lr["tmin_today"] if lr else None
+        tmax_today, tmin_today, last_measurement = values.get(sid, (None, None, None))
         high = {
             "day": _record(daily.get((sid, "high"))),
             "quinzaine": _record(quinzaine.get((sid, "high"))),
@@ -168,13 +201,17 @@ def api_stations():
                 "first_year": s["first_year"],
                 "tmax_today": tmax_today,
                 "tmin_today": tmin_today,
-                "last_measurement": lr["last_measurement_at"] if lr else None,
+                "last_measurement": last_measurement,
                 "records": {"high": high, "low": low},
                 "heat": _status(tmax_today, high, "heat"),
                 "cold": _status(tmin_today, low, "cold"),
             }
         )
-    return {"date": today.isoformat(), "generated_at": now_local.isoformat(), "stations": stations}
+    return {
+        "date": target_date.isoformat(),
+        "generated_at": generated_at.isoformat(),
+        "stations": stations,
+    }
 
 
 @app.get("/api/stations/{station_id}")

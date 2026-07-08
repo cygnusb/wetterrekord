@@ -30,6 +30,20 @@ header h1 .claim { font-size: 0.8rem; font-weight: 400; color: #9aa4b5; letter-s
 .legend { display: flex; flex-wrap: wrap; gap: 12px; margin-top: 8px; font-size: 0.75rem; color: #9aa4b5; }
 .legend span { display: inline-flex; align-items: center; gap: 4px; }
 .legend i { width: 11px; height: 11px; border-radius: 50%; display: inline-block; }
+.legend i.ring { background: transparent; border: 2px solid; width: 8px; height: 8px; }
+.legend .sep { color: #3a4557; }
+
+.timeline { display: inline-flex; align-items: center; gap: 6px; }
+.timeline input[type=range] { width: 180px; accent-color: #ff8c42; }
+#timeline-label { min-width: 90px; color: #c8d0dd; font-variant-numeric: tabular-nums; }
+#timeline-now {
+  background: #3a4557; color: #fff; border: none; border-radius: 6px;
+  padding: 3px 10px; cursor: pointer; font-size: 0.8rem;
+}
+#timeline-now.hidden, #filter-records-label.hidden { display: none; }
+#filter-records-label input { accent-color: #ff8c42; }
+
+.badge-near { background: transparent; border: 1.5px solid; }
 
 #map { flex: 1; background: #14181f; }
 #map.hidden { display: none; }
@@ -44,6 +58,7 @@ header h1 .claim { font-size: 0.8rem; font-weight: 400; color: #9aa4b5; letter-s
 }
 #stations-table th.sorted { color: #fff; }
 #stations-table td { padding: 4px 10px 4px 0; border-bottom: 1px solid #1e242f; }
+#stations-table td.empty { color: #9aa4b5; padding: 14px 0; }
 #stations-table td.num { font-variant-numeric: tabular-nums; }
 #stations-table tbody tr { cursor: pointer; }
 #stations-table tbody tr:hover { background: #1b202a; }
@@ -52,7 +67,8 @@ header h1 .claim { font-size: 0.8rem; font-weight: 400; color: #9aa4b5; letter-s
   padding: 14px 16px; background: #171c25; border-top: 1px solid #2a3140;
   font-size: 0.82rem; color: #b7c0cf; max-height: 30vh; overflow-y: auto;
 }
-#about h2 { margin: 0 0 6px; font-size: 0.95rem; color: #e8e8e8; }
+#about h2 { margin: 0 0 6px; font-size: 0.95rem; color: #e8e8e8; cursor: pointer; user-select: none; }
+#about-body.hidden { display: none; }
 #about p { margin: 0 0 8px; max-width: 75rem; line-height: 1.5; }
 #about a { color: #8ab4f8; }
 

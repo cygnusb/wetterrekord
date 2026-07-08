@@ -49,6 +49,12 @@
       <option value="30">Tagesrekord ≥ 30 Jahre</option>
       <option value="50">Tagesrekord ≥ 50 Jahre</option>
     </select>
+    <label id="filter-records-label" class="hidden"><input type="checkbox" id="filter-records" checked> nur Rekorde</label>
+    <span class="timeline">
+      <input type="range" id="timeline" min="-96" max="0" value="0" step="1">
+      <span id="timeline-label">jetzt</span>
+      <button id="timeline-now" class="hidden">jetzt</button>
+    </span>
   </div>
   <div class="legend" id="legend"></div>
 </header>
@@ -59,7 +65,8 @@
   <div id="panel-content"></div>
 </aside>
 <section id="about">
-  <h2>Was zeigt diese Seite?</h2>
+  <h2 id="about-toggle">Was zeigt diese Seite? <span id="about-arrow">▾</span></h2>
+  <div id="about-body">
   <p>Diese Live-Karte vergleicht die aktuellen Temperaturen an über 330 Wetterstationen
   des Deutschen Wetterdienstes (DWD) mit den historischen Rekorden der jeweiligen Station —
   viele Messreihen reichen bis ins 19. Jahrhundert zurück. Für jede Station wird geprüft, ob
@@ -73,6 +80,7 @@
   Wetterdienst, CDC Open Data</a>. Inspiriert von <a href="https://recordpy.fr"
   rel="noopener">recordpy.fr</a>. Quellcode auf <a
   href="https://github.com/cygnusb/recordpy.de" rel="noopener">GitHub</a>.</p>
+  </div>
 </section>
 <footer>
   Datenbasis: <a href="https://opendata.dwd.de/" target="_blank" rel="noopener">Deutscher Wetterdienst</a> (CDC Open Data),

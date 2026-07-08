@@ -47,6 +47,12 @@ CREATE TABLE IF NOT EXISTS alltime_records (
     record_date TEXT NOT NULL,
     PRIMARY KEY (station_id, kind)
 );
+CREATE TABLE IF NOT EXISTS measurements (
+    station_id TEXT NOT NULL,
+    ts TEXT NOT NULL,
+    tt REAL NOT NULL,
+    PRIMARY KEY (station_id, ts)
+);
 CREATE TABLE IF NOT EXISTS live_state (
     station_id TEXT PRIMARY KEY,
     date TEXT NOT NULL,
