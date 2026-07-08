@@ -226,7 +226,7 @@ function renderMap() {
   for (const st of stations) {
     const m = markers.get(st.id);
     const info = statusInfo(st);
-    const hideNonRecord = recordsOnly.map && !["broken", "near"].includes(info.type);
+    const hideNonRecord = recordsOnly.map && info.type !== "broken";
     if (view !== "map" || !passesFilter(st) || hideNonRecord) {
       m.unbindTooltip();
       map.removeLayer(m);
@@ -274,7 +274,7 @@ const LEVEL_ORDER = { alltime: 0, month: 1, quinzaine: 2, day: 3, null: 4 };
 function renderTable() {
   let rows = filtered();
   if (recordsOnly.table) {
-    rows = rows.filter((st) => ["broken", "near"].includes(statusInfo(st).type));
+    rows = rows.filter((st) => statusInfo(st).type === "broken");
   }
   rows = rows.slice().sort((a, b) => {
     const col = COLUMNS.find((x) => x.key === sortKey);

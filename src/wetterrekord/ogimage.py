@@ -24,6 +24,9 @@ MUTED = "#9aa4b5"
 ACCENT = "#ff9248"
 HEAT_COLORS = {"alltime": "#8b0012", "month": "#e63946", "quinzaine": "#f4692e", "day": "#ff9248"}
 COLD_COLORS = {"alltime": "#021c8f", "month": "#2f6fed", "quinzaine": "#38a3e0", "day": "#6ec6ff"}
+GUST_COLOR = "#9c4dcc"
+RAIN_COLOR = "#2bb5a0"
+PRESSURE_COLOR = "#ddc233"
 NONE_COLOR = "#5a6577"
 NODATA_COLOR = "#333a48"
 
@@ -82,43 +85,46 @@ def render(data: dict) -> bytes:
         d.polygon([project(lon, lat) for lon, lat in ring], fill=LAND_FILL, outline=LAND_EDGE)
 
     stations = data.get("stations", [])
-    # draw order: background dots first, then near-record rings, then broken
-    plain, near, broken = [], [], []
-    heat_total = cold_total = 0
+    # draw order: background dots first, then broken records on top
+    # ("near record" is deliberately not shown in the shared image)
+    plain, broken = [], []
+    counts = {"heat": 0, "cold": 0, "gust": 0, "precip": 0, "pressure": 0}
     hottest = coldest = None
     for st in stations:
-        if st["heat"]["level"]:
-            heat_total += 1
-        if st["cold"]["level"]:
-            cold_total += 1
+        params = st.get("params", {})
+        counts["heat"] += 1 if st["heat"]["level"] else 0
+        counts["cold"] += 1 if st["cold"]["level"] else 0
+        for key, name in (("gust", "gust"), ("precip", "precip")):
+            counts[name] += 1 if params.get(key, {}).get("status", {}).get("level") else 0
+        counts["pressure"] += sum(
+            1 for key in ("phigh", "plow") if params.get(key, {}).get("status", {}).get("level")
+        )
         if st["tmax_today"] is not None and (hottest is None or st["tmax_today"] > hottest["tmax_today"]):
             hottest = st
         if st["tmin_today"] is not None and (coldest is None or st["tmin_today"] < coldest["tmin_today"]):
             coldest = st
+        # marker color: temperature first, then the other parameters
         if st["heat"]["level"]:
             broken.append((st, HEAT_COLORS[st["heat"]["level"]]))
         elif st["cold"]["level"]:
             broken.append((st, COLD_COLORS[st["cold"]["level"]]))
-        elif st["heat"]["near"]:
-            near.append((st, HEAT_COLORS[st["heat"]["near"]]))
-        elif st["cold"]["near"]:
-            near.append((st, COLD_COLORS[st["cold"]["near"]]))
+        elif params.get("gust", {}).get("status", {}).get("level"):
+            broken.append((st, GUST_COLOR))
+        elif params.get("precip", {}).get("status", {}).get("level"):
+            broken.append((st, RAIN_COLOR))
+        elif any(
+            params.get(key, {}).get("status", {}).get("level") for key in ("phigh", "plow")
+        ):
+            broken.append((st, PRESSURE_COLOR))
         else:
             plain.append((st, NODATA_COLOR if st["tmax_today"] is None else NONE_COLOR))
 
-    def dot(st, color, r, outline=None, width=1, fill=True):
+    def dot(st, color, r):
         x, y = project(st["lon"], st["lat"])
-        d.ellipse(
-            (x - r, y - r, x + r, y + r),
-            fill=color if fill else None,
-            outline=outline or "#0b0e13",
-            width=width,
-        )
+        d.ellipse((x - r, y - r, x + r, y + r), fill=color, outline="#0b0e13")
 
     for st, color in plain:
         dot(st, color, 4)
-    for st, color in near:
-        dot(st, color, 8, outline=color, width=3, fill=False)
     for st, color in broken:
         dot(st, color, 9)
 
@@ -129,7 +135,7 @@ def render(data: dict) -> bytes:
     d.text((x + w, 60), "rekord", font=_font(64, bold=True), fill=ACCENT)
     w2 = d.textlength("rekord", font=_font(64, bold=True))
     d.text((x + w + w2, 60), ".de", font=_font(64, bold=True), fill=TEXT)
-    d.text((x, 148), "Temperaturrekorde Deutschland live", font=_font(30), fill=MUTED)
+    d.text((x, 148), "Wetterrekorde Deutschland live", font=_font(30), fill=MUTED)
 
     try:
         date = datetime.fromisoformat(data["date"])
@@ -138,7 +144,7 @@ def render(data: dict) -> bytes:
         date_str = ""
     d.text((x, 206), date_str, font=_font(26), fill=MUTED)
 
-    total = heat_total + cold_total
+    total = sum(counts.values())
     d.text(
         (x, 274),
         f"{total} Rekord{'' if total == 1 else 'e'} gebrochen",
@@ -146,11 +152,17 @@ def render(data: dict) -> bytes:
         fill=TEXT,
     )
     y = 352
-    d.ellipse((x, y + 6, x + 18, y + 24), fill=HEAT_COLORS["day"])
-    d.text((x + 30, y), f"{heat_total} Hitze", font=_font(30), fill=TEXT)
-    xc = x + 30 + d.textlength(f"{heat_total} Hitze", font=_font(30)) + 40
-    d.ellipse((xc, y + 6, xc + 18, y + 24), fill=COLD_COLORS["day"])
-    d.text((xc + 30, y), f"{cold_total} Kälte", font=_font(30), fill=TEXT)
+    xc = x
+    for color, label in (
+        (HEAT_COLORS["day"], f"{counts['heat']} Hitze"),
+        (COLD_COLORS["day"], f"{counts['cold']} Kälte"),
+        (GUST_COLOR, f"{counts['gust']} Böen"),
+        (RAIN_COLOR, f"{counts['precip']} Regen"),
+        (PRESSURE_COLOR, f"{counts['pressure']} Druck"),
+    ):
+        d.ellipse((xc, y + 5, xc + 14, y + 19), fill=color)
+        d.text((xc + 22, y), label, font=_font(24), fill=TEXT)
+        xc += 22 + d.textlength(label, font=_font(24)) + 26
 
     y = 420
     if hottest:
