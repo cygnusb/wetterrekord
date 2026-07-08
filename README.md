@@ -7,14 +7,17 @@
 [![Docker Hub](https://img.shields.io/docker/pulls/cygnusbn/wetterrekord?logo=docker)](https://hub.docker.com/r/cygnusbn/wetterrekord)
 [![Python](https://img.shields.io/badge/python-3.14-blue?logo=python&logoColor=white)](pyproject.toml)
 
-Live map of temperature records in Germany — inspired by [recordpy.fr](https://recordpy.fr),
+Live map of weather records in Germany — inspired by [recordpy.fr](https://recordpy.fr),
 built on [DWD Open Data](https://opendata.dwd.de/climate_environment/CDC/) (Climate Data Center
 of the German Meteorological Service).
 
 For every weather station with at least 30 years of measurement history and
-current 10-minute observations, the map shows how close today's temperature is
-to the historical records: daily record (same calendar day), monthly record and
-all-time record — for both heat (Tmax) and cold (Tmin).
+current 10-minute observations, the map shows how close today's values are
+to the historical records: daily record (same calendar day), half-month,
+monthly and all-time record. Tracked parameters: temperature (heat/Tmax and
+cold/Tmin), wind gusts (daily maximum), precipitation (daily sum) and air
+pressure (daily mean, high and low) — each parameter only at stations with
+30+ years of history for that parameter.
 
 ## Running with Docker (recommended)
 

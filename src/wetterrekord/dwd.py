@@ -29,8 +29,11 @@ class StationInfo:
 @dataclass(frozen=True)
 class DailyValue:
     day: date
-    tmax: float | None  # TXK
-    tmin: float | None  # TNK
+    tmax: float | None = None  # TXK
+    tmin: float | None = None  # TNK
+    fx: float | None = None  # FX, daily max wind gust (m/s)
+    rsk: float | None = None  # RSK, daily precipitation sum (mm)
+    pm: float | None = None  # PM, daily mean pressure at station altitude (hPa)
 
 
 _STATION_RE = re.compile(
@@ -64,43 +67,59 @@ def parse_station_list(text: str) -> list[StationInfo]:
     return stations
 
 
+def _field_value(fields: list[str], idx: int | None) -> float | None:
+    if idx is None or len(fields) <= idx:
+        return None
+    try:
+        v = float(fields[idx])
+    except ValueError:
+        return None
+    return None if v == MISSING else v
+
+
 def parse_daily_kl(data: bytes) -> list[DailyValue]:
-    """Extract TXK/TNK from a produkt_klima_tag file (raw bytes)."""
+    """Extract TXK/TNK/FX/RSK/PM from a produkt_klima_tag file (raw bytes)."""
     lines = data.decode("latin-1").splitlines()
     header = [h.strip() for h in lines[0].split(";")]
-    i_date, i_txk, i_tnk = header.index("MESS_DATUM"), header.index("TXK"), header.index("TNK")
+    i_date = header.index("MESS_DATUM")
+    idx = {c: header.index(c) if c in header else None for c in ("TXK", "TNK", "FX", "RSK", "PM")}
     values = []
     for line in lines[1:]:
         fields = line.split(";")
-        if len(fields) <= max(i_txk, i_tnk):
+        if len(fields) <= i_date or not fields[i_date].strip().isdigit():
             continue
-        txk = float(fields[i_txk])
-        tnk = float(fields[i_tnk])
         values.append(
             DailyValue(
                 day=datetime.strptime(fields[i_date].strip(), "%Y%m%d").date(),
-                tmax=None if txk == MISSING else txk,
-                tmin=None if tnk == MISSING else tnk,
+                tmax=_field_value(fields, idx["TXK"]),
+                tmin=_field_value(fields, idx["TNK"]),
+                fx=_field_value(fields, idx["FX"]),
+                rsk=_field_value(fields, idx["RSK"]),
+                pm=_field_value(fields, idx["PM"]),
             )
         )
     return values
 
 
-def parse_10min_tu(data: bytes) -> list[tuple[datetime, float]]:
-    """Extract (UTC timestamp, TT_10) pairs from a produkt_zehn_now_tu file."""
+def parse_10min(data: bytes, columns: list[str]) -> list[tuple[datetime, tuple[float | None, ...]]]:
+    """Extract (UTC timestamp, values) rows from a 10-minute product file.
+
+    Rows where all requested columns are missing (-999 or absent) are skipped.
+    """
     lines = data.decode("latin-1").splitlines()
     header = [h.strip() for h in lines[0].split(";")]
-    i_date, i_tt = header.index("MESS_DATUM"), header.index("TT_10")
+    i_date = header.index("MESS_DATUM")
+    idx = [header.index(c) if c in header else None for c in columns]
     values = []
     for line in lines[1:]:
         fields = line.split(";")
-        if len(fields) <= i_tt:
+        if len(fields) <= i_date or not fields[i_date].strip().isdigit():
             continue
-        tt = float(fields[i_tt])
-        if tt == MISSING:
+        vals = tuple(_field_value(fields, i) for i in idx)
+        if all(v is None for v in vals):
             continue
         ts = datetime.strptime(fields[i_date].strip(), "%Y%m%d%H%M").replace(tzinfo=timezone.utc)
-        values.append((ts, tt))
+        values.append((ts, vals))
     return values
 
 
@@ -171,6 +190,29 @@ class DwdClient:
                 values[v.day] = v  # recent overrides historical at the boundary
         return [values[d] for d in sorted(values)]
 
-    def now_values(self, station_id: str) -> list[tuple[datetime, float]]:
+    def now_values(self, station_id: str) -> list[tuple[datetime, tuple[float | None, ...]]]:
+        """Live temperature + station pressure: [(ts, (TT_10, PP_10))]."""
         data = self._get(config.TU_NOW + f"10minutenwerte_TU_{station_id}_now.zip")
-        return parse_10min_tu(read_zip_member(data))
+        return parse_10min(read_zip_member(data), ["TT_10", "PP_10"])
+
+    def _now_optional(self, url: str) -> bytes | None:
+        """Not every station appears in every 10-minute dataset — 404 is normal."""
+        try:
+            data = self._get(url)
+        except httpx.HTTPStatusError as exc:
+            if exc.response.status_code == 404:
+                return None
+            raise
+        return read_zip_member(data)
+
+    def now_gusts(self, station_id: str) -> list[tuple[datetime, tuple[float | None, ...]]]:
+        """Live wind gusts: [(ts, (FX_10,))] — empty if the station has none."""
+        raw = self._now_optional(
+            config.EXTREME_WIND_NOW + f"10minutenwerte_extrema_wind_{station_id}_now.zip"
+        )
+        return [] if raw is None else parse_10min(raw, ["FX_10"])
+
+    def now_precip(self, station_id: str) -> list[tuple[datetime, tuple[float | None, ...]]]:
+        """Live 10-minute precipitation: [(ts, (RWS_10,))] — empty if none."""
+        raw = self._now_optional(config.PRECIP_NOW + f"10minutenwerte_nieder_{station_id}_now.zip")
+        return [] if raw is None else parse_10min(raw, ["RWS_10"])

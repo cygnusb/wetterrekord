@@ -44,10 +44,15 @@ async def lifespan(app: FastAPI):
     # datetimes in the scheduler timezone — in a UTC container the job is
     # then considered misfired and gets discarded.
     now = datetime.now(ZoneInfo(config.LOCAL_TZ))
-    # Also re-ingest when a schema upgrade added a still-empty records table.
+    # Also re-ingest when a schema upgrade added still-empty records
+    # (v0.2: quinzaine table, v0.7: non-temperature parameters).
     db_empty = (
         conn.execute("SELECT count(*) FROM stations").fetchone()[0] == 0
         or conn.execute("SELECT count(*) FROM quinzaine_records").fetchone()[0] == 0
+        or conn.execute(
+            "SELECT count(*) FROM quinzaine_records WHERE param != 'temp'"
+        ).fetchone()[0]
+        == 0
     )
     if db_empty:
         # First start (e.g. fresh container): load the history in the
@@ -89,14 +94,17 @@ STATUS_LEVELS = ("alltime", "month", "quinzaine", "day")
 
 
 def _status(
-    today_val: float | None, records: dict[str, dict | None], kind: str
+    today_val: float | None,
+    records: dict[str, dict | None],
+    kind: str,
+    near_delta: float = config.NEAR_RECORD_DELTA,
 ) -> dict:
     """Compare today's value against the record levels (highest level wins).
 
-    kind="heat": today_val is tmax, record broken if greater.
-    kind="cold": today_val is tmin, record broken if smaller.
+    kind="heat": record broken if today's value is greater.
+    kind="cold": record broken if smaller.
     Returns {"level": broken level or None, "near": highest level within
-    NEAR_RECORD_DELTA or None}.
+    near_delta or None}.
     """
     result = {"level": None, "near": None}
     if today_val is None:
@@ -110,19 +118,27 @@ def _status(
         if diff >= 0:
             result["level"] = level
             return result
-        if result["near"] is None and diff >= -config.NEAR_RECORD_DELTA:
+        if result["near"] is None and diff >= -near_delta:
             result["near"] = level
     return result
 
 
 def past_values(db_conn: sqlite3.Connection, at: datetime) -> dict[str, tuple]:
-    """Per-station (tmax, tmin, last ts) from stored measurements between the
-    local start of `at`'s day and `at`."""
+    """Per-station (tmax, tmin, gust, rain, pp, last ts) from stored
+    measurements between the local start of `at`'s day and `at`."""
     day_start = at.replace(hour=0, minute=0, second=0, microsecond=0)
     return {
-        r["station_id"]: (r["mx"], r["mn"], r["last_ts"])
+        r["station_id"]: (
+            r["mx"],
+            r["mn"],
+            r["gust"],
+            round(r["rain"], 1) if r["rain"] is not None else None,
+            round(r["pp"], 1) if r["pp"] is not None else None,
+            r["last_ts"],
+        )
         for r in db_conn.execute(
-            "SELECT station_id, MAX(tt) mx, MIN(tt) mn, MAX(ts) last_ts"
+            "SELECT station_id, MAX(tt) mx, MIN(tt) mn, MAX(fx) gust,"
+            " SUM(rr) rain, AVG(pp) pp, MAX(ts) last_ts"
             " FROM measurements WHERE ts >= ? AND ts <= ? GROUP BY station_id",
             (day_start.isoformat(), at.isoformat()),
         )
@@ -152,7 +168,14 @@ def api_stations(at: str | None = None):
         target_date = now_local.date()
         generated_at = now_local
         values = {
-            r["station_id"]: (r["tmax_today"], r["tmin_today"], r["last_measurement_at"])
+            r["station_id"]: (
+                r["tmax_today"],
+                r["tmin_today"],
+                r["gust_today"],
+                r["rain_today"],
+                r["pp_today"],
+                r["last_measurement_at"],
+            )
             for r in conn.execute(
                 "SELECT * FROM live_state WHERE date = ?", (target_date.isoformat(),)
             )
@@ -162,41 +185,50 @@ def api_stations(at: str | None = None):
     half = 1 if day <= 15 else 2
 
     daily = {
-        (r["station_id"], r["kind"]): r
+        (r["station_id"], r["param"], r["kind"]): r
         for r in conn.execute(
             "SELECT * FROM daily_records WHERE month = ? AND day = ?", (month, day)
         )
     }
     quinzaine = {
-        (r["station_id"], r["kind"]): r
+        (r["station_id"], r["param"], r["kind"]): r
         for r in conn.execute(
             "SELECT * FROM quinzaine_records WHERE month = ? AND half = ?", (month, half)
         )
     }
     monthly = {
-        (r["station_id"], r["kind"]): r
+        (r["station_id"], r["param"], r["kind"]): r
         for r in conn.execute("SELECT * FROM monthly_records WHERE month = ?", (month,))
     }
     alltime = {
-        (r["station_id"], r["kind"]): r for r in conn.execute("SELECT * FROM alltime_records")
+        (r["station_id"], r["param"], r["kind"]): r
+        for r in conn.execute("SELECT * FROM alltime_records")
     }
+
+    def levels(sid: str, param: str, kind: str) -> dict:
+        return {
+            "day": _record(daily.get((sid, param, kind))),
+            "quinzaine": _record(quinzaine.get((sid, param, kind))),
+            "month": _record(monthly.get((sid, param, kind))),
+            "alltime": _record(alltime.get((sid, param, kind))),
+        }
+
+    def param_block(sid: str, param: str, kind: str, status_kind: str, value) -> dict:
+        recs = levels(sid, param, kind)
+        return {
+            "value": value,
+            "records": recs,
+            "status": _status(value, recs, status_kind, config.NEAR_DELTA[param]),
+        }
 
     stations = []
     for s in conn.execute("SELECT * FROM stations"):
         sid = s["id"]
-        tmax_today, tmin_today, last_measurement = values.get(sid, (None, None, None))
-        high = {
-            "day": _record(daily.get((sid, "high"))),
-            "quinzaine": _record(quinzaine.get((sid, "high"))),
-            "month": _record(monthly.get((sid, "high"))),
-            "alltime": _record(alltime.get((sid, "high"))),
-        }
-        low = {
-            "day": _record(daily.get((sid, "low"))),
-            "quinzaine": _record(quinzaine.get((sid, "low"))),
-            "month": _record(monthly.get((sid, "low"))),
-            "alltime": _record(alltime.get((sid, "low"))),
-        }
+        tmax_today, tmin_today, gust, rain, pp, last_measurement = values.get(
+            sid, (None, None, None, None, None, None)
+        )
+        high = levels(sid, "temp", "high")
+        low = levels(sid, "temp", "low")
         stations.append(
             {
                 "id": sid,
@@ -212,6 +244,12 @@ def api_stations(at: str | None = None):
                 "records": {"high": high, "low": low},
                 "heat": _status(tmax_today, high, "heat"),
                 "cold": _status(tmin_today, low, "cold"),
+                "params": {
+                    "gust": param_block(sid, "gust", "high", "heat", gust),
+                    "precip": param_block(sid, "precip", "high", "heat", rain),
+                    "phigh": param_block(sid, "pressure", "high", "heat", pp),
+                    "plow": param_block(sid, "pressure", "low", "cold", pp),
+                },
             }
         )
     return {
@@ -227,13 +265,20 @@ def api_station_detail(station_id: str):
     if s is None:
         raise HTTPException(status_code=404, detail="unknown station")
     monthly = [
-        {"month": r["month"], "kind": r["kind"], "value": r["value"], "date": r["record_date"]}
+        {
+            "param": r["param"],
+            "month": r["month"],
+            "kind": r["kind"],
+            "value": r["value"],
+            "date": r["record_date"],
+        }
         for r in conn.execute(
-            "SELECT * FROM monthly_records WHERE station_id = ? ORDER BY month", (station_id,)
+            "SELECT * FROM monthly_records WHERE station_id = ? ORDER BY param, month",
+            (station_id,),
         )
     ]
     alltime = [
-        {"kind": r["kind"], "value": r["value"], "date": r["record_date"]}
+        {"param": r["param"], "kind": r["kind"], "value": r["value"], "date": r["record_date"]}
         for r in conn.execute("SELECT * FROM alltime_records WHERE station_id = ?", (station_id,))
     ]
     lr = conn.execute("SELECT * FROM live_state WHERE station_id = ?", (station_id,)).fetchone()

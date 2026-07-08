@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Wetterrekorde Deutschland: Temperaturrekorde heute live | wetterrekord.de</title>
-<meta name="description" content="Wetterrekorde in Deutschland live: Welche Wetterstation bricht heute ihren Temperaturrekord? Hitzerekorde und Kälterekorde (Tag, Monat, Allzeit) von über 330 DWD-Stationen auf einer Live-Karte — höchste und tiefste Temperatur heute, alle 15 Minuten aktualisiert.">
+<meta name="description" content="Wetterrekorde in Deutschland live: Welche Wetterstation bricht heute ihren Temperaturrekord? Hitzerekorde, Kälterekorde, Sturm-, Regen- und Luftdruckrekorde (Tag, Monat, Allzeit) von über 330 DWD-Stationen auf einer Live-Karte — alle 15 Minuten aktualisiert.">
 <link rel="canonical" href="{{BASE_URL}}/">
 <meta property="og:type" content="website">
 <meta property="og:title" content="Wetterrekorde Deutschland: Temperaturrekorde heute live">
@@ -26,7 +26,7 @@
   "@context": "https://schema.org",
   "@type": "WebSite",
   "name": "wetterrekord.de – Wetterrekorde und Temperaturrekorde Deutschland",
-  "keywords": "Wetterrekord, Temperaturrekord Deutschland, Hitzerekord, Kälterekord, höchste Temperatur heute, DWD, Wetterstation, Rekordtemperatur",
+  "keywords": "Wetterrekord, Temperaturrekord Deutschland, Hitzerekord, Kälterekord, Sturmrekord, Regenrekord, höchste Temperatur heute, stärkste Windböe heute, DWD, Wetterstation, Rekordtemperatur",
   "url": "{{BASE_URL}}/",
   "description": "Live-Karte der Temperaturrekorde in Deutschland auf Basis von DWD Open Data",
   "inLanguage": "de"
@@ -41,6 +41,10 @@
     <div class="mode-toggle">
       <button id="mode-heat" class="active">🔥 Hitze</button>
       <button id="mode-cold">❄️ Kälte</button>
+      <button id="mode-gust">💨 Böen</button>
+      <button id="mode-precip">🌧️ Regen</button>
+      <button id="mode-phigh" title="höchster Luftdruck">⬆️ Druck</button>
+      <button id="mode-plow" title="tiefster Luftdruck">⬇️ Druck</button>
     </div>
     <div class="mode-toggle">
       <button id="view-map" class="active">Karte</button>
@@ -84,7 +88,13 @@
   das heutige Maximum bzw. Minimum (Hitzerekord bzw. Kälterekord) den <strong>Tagesrekord</strong> (gleicher Kalendertag),
   den <strong>Halbmonats-</strong> oder <strong>Monatsrekord</strong> oder sogar den
   <strong>Allzeitrekord</strong> bricht oder ihm nahekommt.</p>
-  <p>Berücksichtigt werden nur Stationen mit mindestens 30 Jahren Messhistorie. Die
+  <p>Neben der Temperatur gibt es auch <strong>Sturmrekorde</strong> (stärkste
+  Windböe des Tages), <strong>Regenrekorde</strong> (höchste Tagessumme des
+  Niederschlags, läuft über den Tag auf) und <strong>Luftdruckrekorde</strong>
+  (höchster/tiefster Tagesmittelwert — beim Luftdruck ist der Vergleich erst
+  gegen Tagesende belastbar).</p>
+  <p>Berücksichtigt werden nur Stationen mit mindestens 30 Jahren Messhistorie
+  im jeweiligen Messwert — nicht jede Station misst Wind, Niederschlag und Luftdruck. Die
   Live-Werte stammen aus den 10-Minuten-Daten des DWD (etwa 30 Minuten Verzögerung) und
   werden alle 15 Minuten aktualisiert. Datenbasis: <a
   href="https://opendata.dwd.de/climate_environment/CDC/" rel="noopener">Deutscher

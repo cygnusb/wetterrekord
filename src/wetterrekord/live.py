@@ -1,4 +1,5 @@
-"""Live poller: fetch 10-minute data and maintain today's max/min per station."""
+"""Live poller: fetch 10-minute data (temperature/pressure, gusts,
+precipitation) and maintain today's aggregates per station."""
 
 import logging
 import sqlite3
@@ -17,18 +18,45 @@ TZ = ZoneInfo(config.LOCAL_TZ)
 MEASUREMENT_RETENTION_HOURS = 50
 
 
-def poll_station(
-    client: DwdClient, station_id: str
-) -> tuple[str, float, float, datetime, list[tuple[datetime, float]]] | None:
-    """Return (local date, tmax, tmin, last measurement, today's readings) — or None."""
-    values = [(ts.astimezone(TZ), tt) for ts, tt in client.now_values(station_id)]
+def poll_station(client: DwdClient, station_id: str) -> tuple | None:
+    """Today's merged readings and aggregates of one station — or None.
+
+    Returns (date, tmax, tmin, gust_max, rain_sum, pp_mean, last_ts, rows)
+    where rows is [(ts, tt, fx, rr, pp)].
+    """
     today = datetime.now(TZ).date()
-    todays = [(ts, tt) for ts, tt in values if ts.date() == today]
-    if not todays:
+    merged: dict[datetime, list] = {}  # local ts -> [tt, fx, rr, pp]
+
+    def add(series, slots):
+        for ts_utc, vals in series:
+            ts = ts_utc.astimezone(TZ)
+            if ts.date() != today:
+                continue
+            row = merged.setdefault(ts, [None, None, None, None])
+            for slot, val in zip(slots, vals):
+                if val is not None:
+                    row[slot] = val
+
+    add(client.now_values(station_id), (0, 3))  # TT_10, PP_10
+    add(client.now_gusts(station_id), (1,))  # FX_10
+    add(client.now_precip(station_id), (2,))  # RWS_10
+    if not merged:
         return None
-    temps = [tt for _, tt in todays]
-    last_ts = max(ts for ts, _ in todays)
-    return today.isoformat(), max(temps), min(temps), last_ts, todays
+
+    def series(slot):
+        return [row[slot] for row in merged.values() if row[slot] is not None]
+
+    temps, gusts, rains, pressures = series(0), series(1), series(2), series(3)
+    return (
+        today.isoformat(),
+        max(temps) if temps else None,
+        min(temps) if temps else None,
+        max(gusts) if gusts else None,
+        round(sum(rains), 1) if rains else None,
+        round(sum(pressures) / len(pressures), 1) if pressures else None,
+        max(merged),
+        sorted((ts, *row) for ts, row in merged.items()),
+    )
 
 
 def poll_all(conn: sqlite3.Connection, client: DwdClient | None = None) -> None:
@@ -52,14 +80,14 @@ def poll_all(conn: sqlite3.Connection, client: DwdClient | None = None) -> None:
 
     cutoff = (datetime.now(TZ) - timedelta(hours=MEASUREMENT_RETENTION_HOURS)).isoformat()
     with conn:
-        for sid, day, tmax, tmin, last_ts, todays in results:
+        for sid, day, tmax, tmin, gust, rain, pp, last_ts, rows in results:
             conn.execute(
-                "INSERT OR REPLACE INTO live_state VALUES (?,?,?,?,?)",
-                (sid, day, tmax, tmin, last_ts.isoformat()),
+                "INSERT OR REPLACE INTO live_state VALUES (?,?,?,?,?,?,?,?)",
+                (sid, day, tmax, tmin, gust, rain, pp, last_ts.isoformat()),
             )
             conn.executemany(
-                "INSERT OR REPLACE INTO measurements VALUES (?,?,?)",
-                [(sid, ts.isoformat(), tt) for ts, tt in todays],
+                "INSERT OR REPLACE INTO measurements VALUES (?,?,?,?,?,?)",
+                [(sid, ts.isoformat(), tt, fx, rr, ppv) for ts, tt, fx, rr, ppv in rows],
             )
         conn.execute("DELETE FROM measurements WHERE ts < ?", (cutoff,))
     log.info("Live poll done: %d/%d stations with data for today", len(results), len(station_ids))

@@ -10,11 +10,83 @@ const COLD_COLORS = {
   quinzaine: "#38a3e0",
   day: "#6ec6ff",
 };
+const GUST_COLORS = {
+  alltime: "#3f0e63",
+  month: "#7b1fa2",
+  quinzaine: "#9c4dcc",
+  day: "#c58af9",
+};
+const RAIN_COLORS = {
+  alltime: "#00463d",
+  month: "#00897b",
+  quinzaine: "#2bb5a0",
+  day: "#7fd8c8",
+};
+const PHIGH_COLORS = {
+  alltime: "#7a5c00",
+  month: "#c7a500",
+  quinzaine: "#ddc233",
+  day: "#f3e57e",
+};
+const PLOW_COLORS = {
+  alltime: "#59103f",
+  month: "#ad1457",
+  quinzaine: "#d81b60",
+  day: "#f48fb1",
+};
 const NONE_COLOR = "#5a6577";
 const NODATA_COLOR = "#333a48";
 const LEVEL_LABEL = { alltime: "Allzeit", month: "Monat", quinzaine: "Halbmonat", day: "Tag" };
 const LEVEL_LABEL_LONG = {
   alltime: "Allzeitrekord", month: "Monatsrekord", quinzaine: "Halbmonatsrekord", day: "Tagesrekord",
+};
+
+function fmtTemp(v) {
+  return v === null || v === undefined ? "–" : v.toFixed(1).replace(".", ",") + " °C";
+}
+function fmtGust(v) {
+  // FX kommt in m/s vom DWD, angezeigt wird km/h
+  return v === null || v === undefined ? "–" : Math.round(v * 3.6) + " km/h";
+}
+function fmtRain(v) {
+  return v === null || v === undefined ? "–" : v.toFixed(1).replace(".", ",") + " mm";
+}
+function fmtPress(v) {
+  return v === null || v === undefined ? "–" : v.toFixed(1).replace(".", ",") + " hPa";
+}
+const shortTemp = (v) => v.toFixed(1).replace(".", ",") + "°";
+
+const MODES = {
+  heat: {
+    icon: "🔥", noun: "Hitzerekorde", todayLabel: "Max/Min des Tages", nearText: "≤1 °C",
+    colors: HEAT_COLORS, value: (st) => st.tmax_today, records: (st) => st.records.high,
+    status: (st) => st.heat, fmt: fmtTemp, short: shortTemp,
+  },
+  cold: {
+    icon: "❄️", noun: "Kälterekorde", todayLabel: "Max/Min des Tages", nearText: "≤1 °C",
+    colors: COLD_COLORS, value: (st) => st.tmin_today, records: (st) => st.records.low,
+    status: (st) => st.cold, fmt: fmtTemp, short: shortTemp,
+  },
+  gust: {
+    icon: "💨", noun: "Sturmrekorde (Böen)", todayLabel: "stärkste Böe heute", nearText: "≤7 km/h",
+    colors: GUST_COLORS, value: (st) => st.params.gust.value, records: (st) => st.params.gust.records,
+    status: (st) => st.params.gust.status, fmt: fmtGust, short: fmtGust,
+  },
+  precip: {
+    icon: "🌧️", noun: "Regenrekorde (Tagessumme)", todayLabel: "Niederschlag heute (läuft auf)", nearText: "≤5 mm",
+    colors: RAIN_COLORS, value: (st) => st.params.precip.value, records: (st) => st.params.precip.records,
+    status: (st) => st.params.precip.status, fmt: fmtRain, short: fmtRain,
+  },
+  phigh: {
+    icon: "⬆️", noun: "Hochdruckrekorde (Tagesmittel)", todayLabel: "Luftdruck-Tagesmittel (bisher)", nearText: "≤2 hPa",
+    colors: PHIGH_COLORS, value: (st) => st.params.phigh.value, records: (st) => st.params.phigh.records,
+    status: (st) => st.params.phigh.status, fmt: fmtPress, short: fmtPress,
+  },
+  plow: {
+    icon: "⬇️", noun: "Tiefdruckrekorde (Tagesmittel)", todayLabel: "Luftdruck-Tagesmittel (bisher)", nearText: "≤2 hPa",
+    colors: PLOW_COLORS, value: (st) => st.params.plow.value, records: (st) => st.params.plow.records,
+    status: (st) => st.params.plow.status, fmt: fmtPress, short: fmtPress,
+  },
 };
 
 let mode = "heat";
@@ -34,20 +106,24 @@ L.tileLayer("https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png", {
 }).addTo(map);
 
 function levelColors() {
-  return mode === "heat" ? HEAT_COLORS : COLD_COLORS;
+  return MODES[mode].colors;
 }
 function stStatus(st) {
-  return mode === "heat" ? st.heat : st.cold;
+  return MODES[mode].status(st);
 }
 function stToday(st) {
-  return mode === "heat" ? st.tmax_today : st.tmin_today;
+  return MODES[mode].value(st);
 }
 function stRecords(st) {
-  return mode === "heat" ? st.records.high : st.records.low;
+  return MODES[mode].records(st);
 }
 // Status einer Station im aktiven Modus: {type: broken|near|none|nodata, level}
 function statusInfo(st) {
-  if (stToday(st) === null) return { type: "nodata", level: null };
+  const recs = stRecords(st);
+  const hasRecords = recs && Object.values(recs).some((r) => r);
+  if (stToday(st) === null || stToday(st) === undefined || !hasRecords) {
+    return { type: "nodata", level: null };
+  }
   const s = stStatus(st);
   if (s.level) return { type: "broken", level: s.level };
   if (s.near) return { type: "near", level: s.near };
@@ -56,7 +132,7 @@ function statusInfo(st) {
 function badgeText(info) {
   if (info.type === "broken") return `${LEVEL_LABEL_LONG[info.level]} gebrochen`;
   if (info.type === "near") return `nah am ${LEVEL_LABEL_LONG[info.level]}`;
-  if (info.type === "nodata") return "keine aktuellen Daten";
+  if (info.type === "nodata") return "keine Daten";
   return "kein Rekord";
 }
 function badgeHtml(info) {
@@ -78,9 +154,6 @@ function recordAge(st) {
   return y === null ? null : new Date().getFullYear() - y;
 }
 
-function fmtTemp(v) {
-  return v === null || v === undefined ? "–" : v.toFixed(1).replace(".", ",") + " °C";
-}
 function fmtDate(iso) {
   if (!iso) return "–";
   const [y, m, d] = iso.split("-");
@@ -105,18 +178,16 @@ function filtered() {
 
 // ---- Statistik-Leiste ----
 function brokenCount(st, m) {
-  return (m === "heat" ? st.heat : st.cold).level ? 1 : 0;
+  return MODES[m].status(st).level ? 1 : 0;
 }
 function renderStats() {
   const c = levelColors();
   const visible = filtered();
-  let heatTotal = 0, coldTotal = 0;
+  const counts = Object.fromEntries(Object.keys(MODES).map((m) => [m, 0]));
   const broken = { alltime: 0, month: 0, quinzaine: 0, day: 0 };
-  let near = 0;
   let oldest = null;
   for (const st of visible) {
-    heatTotal += brokenCount(st, "heat");
-    coldTotal += brokenCount(st, "cold");
+    for (const m of Object.keys(MODES)) counts[m] += brokenCount(st, m);
     const info = statusInfo(st);
     if (info.type === "broken") {
       broken[info.level]++;
@@ -126,19 +197,19 @@ function renderStats() {
         const age = new Date().getFullYear() - year;
         if (!oldest || age > oldest.age) oldest = { age, name: st.name, year };
       }
-    } else if (info.type === "near") {
-      near++;
     }
   }
-  const total = heatTotal + coldTotal;
+  const total = Object.values(counts).reduce((a, b) => a + b, 0);
   const when = timelineOffset === 0 ? "Heute" : "Zu diesem Zeitpunkt";
+  const breakdown = Object.entries(MODES)
+    .map(([m, cfg]) => `${cfg.icon} ${counts[m]}`)
+    .join(" · ");
   const parts = [
-    `<span class="stat"><b>${total}</b> Rekord${total === 1 ? "" : "e"} gebrochen (${when}: 🔥 ${heatTotal} / ❄️ ${coldTotal})</span>`,
+    `<span class="stat"><b>${total}</b> Rekord${total === 1 ? "" : "e"} gebrochen (${when}: ${breakdown})</span>`,
   ];
   for (const lvl of ["alltime", "month", "quinzaine", "day"]) {
     if (broken[lvl]) parts.push(`<span class="stat"><i style="background:${c[lvl]}"></i>${broken[lvl]}× ${LEVEL_LABEL[lvl]}</span>`);
   }
-  parts.push(`<span class="stat"><b>${near}</b> nah dran</span>`);
   if (oldest) {
     parts.push(`<span class="stat">ältester gebrochener Rekord: <b>${oldest.name}</b>, von ${oldest.year} (${oldest.age} Jahre)</span>`);
   }
@@ -148,7 +219,7 @@ function renderStats() {
 // ---- Karte ----
 function tempLabel(st) {
   const v = stToday(st);
-  return v === null || v === undefined ? "" : v.toFixed(1).replace(".", ",") + "°";
+  return v === null || v === undefined ? "" : MODES[mode].short(v);
 }
 function renderMap() {
   const c = levelColors();
@@ -189,10 +260,10 @@ const COLUMNS = [
   { key: "name", label: "Station", value: (st) => st.name },
   { key: "bundesland", label: "Bundesland", value: (st) => st.bundesland },
   { key: "altitude", label: "Höhe (m)", value: (st) => st.altitude, num: true },
-  { key: "today", label: "aktuell", value: (st) => stToday(st), num: true, fmt: fmtTemp },
+  { key: "today", label: "aktuell", value: (st) => stToday(st), num: true, fmt: (v) => MODES[mode].fmt(v) },
   {
     key: "record", label: "Tagesrekord", num: true,
-    value: (st) => (stRecords(st).day ? stRecords(st).day.value : null), fmt: fmtTemp,
+    value: (st) => (stRecords(st).day ? stRecords(st).day.value : null), fmt: (v) => MODES[mode].fmt(v),
   },
   { key: "recordAge", label: "Rekord von", value: (st) => recordYear(st), num: true },
   { key: "status", label: "Status", value: (st) => statusInfo(st) },
@@ -256,20 +327,21 @@ function showPanel(st) {
           ? `<span style="color:${c[lvl]}">●</span> `
           : `<span style="color:${c[lvl]}">○</span> `;
       }
-      return `<tr><td>${mark}${label}</td><td class="val">${fmtTemp(r.value)}</td><td class="date">${fmtDate(r.date)}</td></tr>`;
+      return `<tr><td>${mark}${label}</td><td class="val">${MODES[mode].fmt(r.value)}</td><td class="date">${fmtDate(r.date)}</td></tr>`;
     })
     .join("");
+  const todayVals = mode === "heat" || mode === "cold"
+    ? `<span class="hot">▲ ${fmtTemp(st.tmax_today)}</span>
+       <span class="cold">▼ ${fmtTemp(st.tmin_today)}</span>`
+    : `<span>${MODES[mode].icon} ${MODES[mode].fmt(stToday(st))}</span>`;
   document.getElementById("panel-content").innerHTML = `
     <h2>${st.name}</h2>
     <div class="meta">${st.bundesland} · ${st.altitude} m · Daten seit ${st.first_year}</div>
     ${badgeHtml(info)}
-    <div class="today-vals">
-      <span class="hot">▲ ${fmtTemp(st.tmax_today)}</span>
-      <span class="cold">▼ ${fmtTemp(st.tmin_today)}</span>
-    </div>
-    <div class="meta">Max/Min des Tages${st.last_measurement ? ", letzte Messung " + st.last_measurement.slice(11, 16) + " Uhr" : ""}</div>
+    <div class="today-vals">${todayVals}</div>
+    <div class="meta">${MODES[mode].todayLabel}${st.last_measurement ? ", letzte Messung " + st.last_measurement.slice(11, 16) + " Uhr" : ""}</div>
     <table>
-      <tr><th>${mode === "heat" ? "Hitzerekorde" : "Kälterekorde"}</th><th></th><th></th></tr>
+      <tr><th>${MODES[mode].noun}</th><th></th><th></th></tr>
       ${rows}
     </table>`;
   document.getElementById("panel").classList.remove("hidden");
@@ -283,7 +355,7 @@ function renderLegend() {
   document.getElementById("legend").innerHTML =
     `${levels}<span class="sep">|</span>` +
     `<span><i style="background:${c.day}"></i>gefüllt = gebrochen</span>` +
-    `<span><i class="ring" style="border-color:${c.day}"></i>Ring = nah dran (≤1 °C)</span>` +
+    `<span><i class="ring" style="border-color:${c.day}"></i>Ring = nah dran (${MODES[mode].nearText})</span>` +
     `<span><i style="background:${NONE_COLOR}"></i>kein Rekord</span>` +
     `<span><i style="background:${NODATA_COLOR}"></i>keine Daten</span>`;
 }
@@ -349,12 +421,12 @@ async function load() {
 function setToggle(groupIds, activeId) {
   for (const id of groupIds) document.getElementById(id).classList.toggle("active", id === activeId);
 }
-document.getElementById("mode-heat").addEventListener("click", () => {
-  mode = "heat"; setToggle(["mode-heat", "mode-cold"], "mode-heat"); render();
-});
-document.getElementById("mode-cold").addEventListener("click", () => {
-  mode = "cold"; setToggle(["mode-heat", "mode-cold"], "mode-cold"); render();
-});
+const MODE_BUTTON_IDS = Object.keys(MODES).map((m) => "mode-" + m);
+for (const m of Object.keys(MODES)) {
+  document.getElementById("mode-" + m).addEventListener("click", () => {
+    mode = m; setToggle(MODE_BUTTON_IDS, "mode-" + m); render();
+  });
+}
 document.getElementById("view-map").addEventListener("click", () => {
   view = "map"; setToggle(["view-map", "view-table"], "view-map"); render();
   map.invalidateSize();

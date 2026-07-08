@@ -10,14 +10,22 @@ DWD_BASE = "https://opendata.dwd.de/climate_environment/CDC/observations_germany
 DAILY_KL_HISTORICAL = f"{DWD_BASE}/daily/kl/historical/"
 DAILY_KL_RECENT = f"{DWD_BASE}/daily/kl/recent/"
 TU_NOW = f"{DWD_BASE}/10_minutes/air_temperature/now/"
+# wind gusts (FX_10) live in extreme_wind, NOT in the wind dataset
+EXTREME_WIND_NOW = f"{DWD_BASE}/10_minutes/extreme_wind/now/"
+PRECIP_NOW = f"{DWD_BASE}/10_minutes/precipitation/now/"
 
 KL_STATIONS_FILE = "KL_Tageswerte_Beschreibung_Stationen.txt"
 TU_NOW_STATIONS_FILE = "zehn_now_tu_Beschreibung_Stationen.txt"
 
 # Stations with less than this many years of daily-value history are ignored.
+# Non-temperature parameters need the same span in their own series, otherwise
+# no records are computed for that parameter at that station.
 MIN_YEARS = 30
 # Within this distance to a record, a station gets the "near" status.
 NEAR_RECORD_DELTA = 1.0
+# Per-parameter "near record" distance in the parameter's unit
+# (temp °C, gust m/s, precip mm, pressure hPa).
+NEAR_DELTA = {"temp": NEAR_RECORD_DELTA, "gust": 2.0, "precip": 5.0, "pressure": 2.0}
 
 LOCAL_TZ = "Europe/Berlin"
 

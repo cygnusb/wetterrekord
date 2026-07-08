@@ -3,7 +3,7 @@ from pathlib import Path
 
 from wetterrekord.dwd import (
     DailyValue,
-    parse_10min_tu,
+    parse_10min,
     parse_daily_kl,
     parse_station_list,
     read_zip_member,
@@ -31,18 +31,31 @@ def test_parse_station_list():
 
 def test_parse_daily_kl():
     values = parse_daily_kl((FIXTURES / "produkt_klima_tag_sample.txt").read_bytes())
-    assert values[0] == DailyValue(day=date(1957, 9, 1), tmax=16.8, tmin=11.9)
+    first = values[0]
+    assert first.day == date(1957, 9, 1)
+    assert first.tmax == 16.8
+    assert first.tmin == 11.9
     # SDK is -999 in the first line — must not affect TXK/TNK
     assert all(v.tmax is None or -60 < v.tmax < 60 for v in values)
+    assert any(v.fx is not None for v in values)
+    assert any(v.rsk is not None for v in values)
+    assert any(v.pm is not None for v in values)
 
 
 def test_parse_10min_now_zip():
     data = read_zip_member((FIXTURES / "10minutenwerte_TU_02667_now.zip").read_bytes())
-    values = parse_10min_tu(data)
+    values = parse_10min(data, ["TT_10", "PP_10"])
     assert values
-    ts, tt = values[0]
+    ts, (tt, _pp) = values[0]
     assert ts.tzinfo == timezone.utc
     assert -60 < tt < 60
+
+
+def test_parse_10min_missing_column():
+    data = read_zip_member((FIXTURES / "10minutenwerte_TU_02667_now.zip").read_bytes())
+    values = parse_10min(data, ["TT_10", "NO_SUCH_COLUMN"])
+    assert values
+    assert all(v[1][1] is None for v in values)
 
 
 def test_compute_records():
@@ -54,13 +67,39 @@ def test_compute_records():
     ]
     r = compute_records(values)
     assert r.first_year == 2000 and r.last_year == 2002
-    assert r.daily_high[(7, 7)].value == 32.0
-    assert r.daily_high[(7, 7)].record_date == date(2001, 7, 7)
-    assert r.daily_low[(7, 7)].value == 14.0
-    assert (7, 8) not in r.daily_low  # tmin fehlt
-    assert r.monthly_high[7].value == 32.0
-    assert r.alltime_high.value == 32.0
-    assert r.alltime_low.value == -10.0
+    assert r.daily[("temp", "high", 7, 7)].value == 32.0
+    assert r.daily[("temp", "high", 7, 7)].record_date == date(2001, 7, 7)
+    assert r.daily[("temp", "low", 7, 7)].value == 14.0
+    assert ("temp", "low", 7, 8) not in r.daily  # tmin fehlt
+    assert r.monthly[("temp", "high", 7)].value == 32.0
+    assert r.alltime[("temp", "high")].value == 32.0
+    assert r.alltime[("temp", "low")].value == -10.0
+
+
+def test_compute_records_extra_params(monkeypatch):
+    from wetterrekord import config
+
+    monkeypatch.setattr(config, "MIN_YEARS", 2)
+    values = [
+        DailyValue(date(2000, 7, 7), tmax=30.0, fx=20.0, rsk=5.0, pm=1010.0),
+        DailyValue(date(2001, 7, 7), tmax=31.0, fx=28.5, rsk=42.1, pm=985.3),
+        DailyValue(date(2002, 7, 8), tmax=29.0, fx=15.0, rsk=0.0, pm=1032.0),
+    ]
+    r = compute_records(values)
+    assert r.alltime[("gust", "high")].value == 28.5
+    assert r.daily[("precip", "high", 7, 7)].value == 42.1
+    assert r.alltime[("pressure", "high")].value == 1032.0
+    assert r.alltime[("pressure", "low")].value == 985.3
+    assert ("gust", "low") not in r.alltime  # gusts only have high records
+
+
+def test_compute_records_min_years_per_param():
+    # 31 years of temperature, but only one year of wind: no gust records
+    values = [DailyValue(date(1990 + i, 7, 7), tmax=30.0) for i in range(31)]
+    values.append(DailyValue(date(2021, 7, 8), tmax=28.0, fx=25.0))
+    r = compute_records(values)
+    assert r.alltime[("temp", "high")].value == 30.0
+    assert ("gust", "high") not in r.alltime
 
 
 def test_quinzaine_boundaries():
@@ -77,10 +116,10 @@ def test_quinzaine_records():
         DailyValue(date(2001, 7, 20), tmax=36.0, tmin=18.0),
     ]
     r = compute_records(values)
-    assert r.quinzaine_high[(7, 1)].value == 33.0
-    assert r.quinzaine_high[(7, 2)].value == 36.0
-    assert r.quinzaine_low[(7, 1)].value == 12.0
-    assert r.monthly_high[7].value == 36.0
+    assert r.quinzaine[("temp", "high", 7, 1)].value == 33.0
+    assert r.quinzaine[("temp", "high", 7, 2)].value == 36.0
+    assert r.quinzaine[("temp", "low", 7, 1)].value == 12.0
+    assert r.monthly[("temp", "high", 7)].value == 36.0
 
 
 def test_status_levels():

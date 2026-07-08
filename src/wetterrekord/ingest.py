@@ -49,42 +49,26 @@ def store_station(
                 records.last_year,
             ),
         )
-        for (month, day), rec in records.daily_high.items():
+        for (param, kind, month, day), rec in records.daily.items():
             conn.execute(
-                "INSERT OR REPLACE INTO daily_records VALUES (?,?,?,?,?,?)",
-                (station.id, month, day, "high", rec.value, rec.record_date.isoformat()),
+                "INSERT OR REPLACE INTO daily_records VALUES (?,?,?,?,?,?,?)",
+                (station.id, param, month, day, kind, rec.value, rec.record_date.isoformat()),
             )
-        for (month, day), rec in records.daily_low.items():
+        for (param, kind, month, half), rec in records.quinzaine.items():
             conn.execute(
-                "INSERT OR REPLACE INTO daily_records VALUES (?,?,?,?,?,?)",
-                (station.id, month, day, "low", rec.value, rec.record_date.isoformat()),
+                "INSERT OR REPLACE INTO quinzaine_records VALUES (?,?,?,?,?,?,?)",
+                (station.id, param, month, half, kind, rec.value, rec.record_date.isoformat()),
             )
-        for (month, half), rec in records.quinzaine_high.items():
+        for (param, kind, month), rec in records.monthly.items():
             conn.execute(
-                "INSERT OR REPLACE INTO quinzaine_records VALUES (?,?,?,?,?,?)",
-                (station.id, month, half, "high", rec.value, rec.record_date.isoformat()),
+                "INSERT OR REPLACE INTO monthly_records VALUES (?,?,?,?,?,?)",
+                (station.id, param, month, kind, rec.value, rec.record_date.isoformat()),
             )
-        for (month, half), rec in records.quinzaine_low.items():
+        for (param, kind), rec in records.alltime.items():
             conn.execute(
-                "INSERT OR REPLACE INTO quinzaine_records VALUES (?,?,?,?,?,?)",
-                (station.id, month, half, "low", rec.value, rec.record_date.isoformat()),
+                "INSERT OR REPLACE INTO alltime_records VALUES (?,?,?,?,?)",
+                (station.id, param, kind, rec.value, rec.record_date.isoformat()),
             )
-        for month, rec in records.monthly_high.items():
-            conn.execute(
-                "INSERT OR REPLACE INTO monthly_records VALUES (?,?,?,?,?)",
-                (station.id, month, "high", rec.value, rec.record_date.isoformat()),
-            )
-        for month, rec in records.monthly_low.items():
-            conn.execute(
-                "INSERT OR REPLACE INTO monthly_records VALUES (?,?,?,?,?)",
-                (station.id, month, "low", rec.value, rec.record_date.isoformat()),
-            )
-        for kind, rec in (("high", records.alltime_high), ("low", records.alltime_low)):
-            if rec:
-                conn.execute(
-                    "INSERT OR REPLACE INTO alltime_records VALUES (?,?,?,?)",
-                    (station.id, kind, rec.value, rec.record_date.isoformat()),
-                )
 
 
 def ingest(limit: int | None = None) -> None:
