@@ -96,6 +96,7 @@ let markers = new Map();
 let sortKey = "recordAge";
 let sortDir = -1;
 let timelineOffset = 0; // 0 = jetzt, negative Schritte à 30 min
+let selectedStationId = null;
 // "nur Rekorde" gilt pro Ansicht: Tabelle standardmäßig an, Karte aus
 const recordsOnly = { map: false, table: true };
 
@@ -310,6 +311,7 @@ function renderTable() {
 
 // ---- Panel ----
 function showPanel(st) {
+  selectedStationId = st.id;
   const c = levelColors();
   const info = statusInfo(st);
   const recs = stRecords(st);
@@ -414,6 +416,11 @@ async function load() {
     m.on("click", () => showPanel(st));
     markers.set(st.id, m);
   }
+  if (selectedStationId !== null && !document.getElementById("panel").classList.contains("hidden")) {
+    const updated = stations.find((s) => s.id === selectedStationId);
+    if (updated) showPanel(updated);
+    else document.getElementById("panel").classList.add("hidden");
+  }
   render();
 }
 
@@ -442,9 +449,10 @@ document.getElementById("filter-records").addEventListener("change", (ev) => {
   render();
 });
 document.getElementById("filter-alt").addEventListener("input", render);
-document.getElementById("panel-close").addEventListener("click", () =>
-  document.getElementById("panel").classList.add("hidden")
-);
+document.getElementById("panel-close").addEventListener("click", () => {
+  selectedStationId = null;
+  document.getElementById("panel").classList.add("hidden");
+});
 document.getElementById("stations-table").addEventListener("click", (ev) => {
   const th = ev.target.closest("th");
   if (th) {
