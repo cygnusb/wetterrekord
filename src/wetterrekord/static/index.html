@@ -59,9 +59,9 @@
       <option value="50">Tagesrekord ≥ 50 Jahre</option>
     </select>
     <label id="filter-records-label"><input type="checkbox" id="filter-records"> nur Rekorde</label>
-    <span class="timeline" title="Zeitpunkt der Anzeige wählen (bis 48 Stunden zurück)">
+    <span class="timeline" title="Zeitpunkt der Anzeige wählen (bis zu 30 Tage zurück, soweit Daten vorliegen)">
       <span class="tl-caption">🕐 Rückblick:</span>
-      <span class="tl-end">−48&thinsp;h</span>
+      <span class="tl-end" id="timeline-min-label">−48&thinsp;h</span>
       <input type="range" id="timeline" min="-96" max="0" value="0" step="1" autocomplete="off" list="timeline-ticks">
       <datalist id="timeline-ticks">
         <option value="-96"></option><option value="-48"></option><option value="0"></option>

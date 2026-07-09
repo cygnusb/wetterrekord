@@ -60,6 +60,7 @@ CREATE TABLE IF NOT EXISTS measurements (
     pp REAL,
     PRIMARY KEY (station_id, ts)
 );
+CREATE INDEX IF NOT EXISTS measurements_ts ON measurements (ts);
 CREATE TABLE IF NOT EXISTS live_state (
     station_id TEXT PRIMARY KEY,
     date TEXT NOT NULL,

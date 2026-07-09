@@ -255,6 +255,8 @@ def api_stations(at: str | None = None):
     return {
         "date": target_date.isoformat(),
         "generated_at": generated_at.isoformat(),
+        # oldest stored measurement — the frontend limits the timeline to this
+        "history_start": conn.execute("SELECT MIN(ts) FROM measurements").fetchone()[0],
         "stations": stations,
     }
 

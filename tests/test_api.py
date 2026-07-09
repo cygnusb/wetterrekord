@@ -35,6 +35,19 @@ def test_past_values_aggregation(tmp_path: Path):
     assert "00003" not in values
 
 
+def test_api_stations_history_start(tmp_path: Path, monkeypatch):
+    import wetterrekord.app as app_mod
+
+    conn = db.connect(tmp_path / "test.sqlite")
+    monkeypatch.setattr(app_mod, "conn", conn)
+    assert app_mod.api_stations()["history_start"] is None
+    conn.execute(
+        "INSERT INTO measurements VALUES (?,?,?,?,?,?)",
+        ("00001", "2026-07-01T12:00:00+02:00", 20.0, None, None, None),
+    )
+    assert app_mod.api_stations()["history_start"] == "2026-07-01T12:00:00+02:00"
+
+
 def test_migration_from_v1_schema(tmp_path: Path):
     import sqlite3
 

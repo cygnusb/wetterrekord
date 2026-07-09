@@ -14,8 +14,8 @@ log = logging.getLogger(__name__)
 
 TZ = ZoneInfo(config.LOCAL_TZ)
 
-# Keep a bit more than the 48 h the timeline can go back.
-MEASUREMENT_RETENTION_HOURS = 50
+# Keep a bit more than the 30 days the timeline can go back.
+MEASUREMENT_RETENTION_HOURS = 31 * 24
 
 
 def poll_station(client: DwdClient, station_id: str) -> tuple | None:

@@ -381,13 +381,36 @@ function updateTimelineLabel() {
   const atNow = timelineOffset === 0;
   if (!atNow) {
     const d = timelineDate();
-    label.textContent = "→ " + d.toLocaleString("de-DE", {
-      weekday: "short", hour: "2-digit", minute: "2-digit",
-    }) + " Uhr";
+    // beyond 24 h the weekday alone is ambiguous — add the date
+    const opts = timelineOffset < -48
+      ? { weekday: "short", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }
+      : { weekday: "short", hour: "2-digit", minute: "2-digit" };
+    label.textContent = "→ " + d.toLocaleString("de-DE", opts) + " Uhr";
   }
   label.classList.toggle("hidden", atNow);
   document.getElementById("timeline-now").classList.toggle("hidden", atNow);
   document.querySelector(".timeline").classList.toggle("tl-past", !atNow);
+}
+
+// slider range: at most 30 days back, but never further than stored data
+const MAX_TIMELINE_OFFSET = -30 * 48; // 30 min steps
+function updateTimelineRange(historyStart) {
+  if (!historyStart) return;
+  const steps = Math.ceil((new Date(historyStart) - Date.now()) / (30 * 60 * 1000));
+  const min = Math.max(MAX_TIMELINE_OFFSET, Math.min(-1, steps));
+  const tl = document.getElementById("timeline");
+  tl.min = min;
+  document.getElementById("timeline-ticks").innerHTML =
+    `<option value="${min}"></option><option value="${Math.round(min / 2)}"></option><option value="0"></option>`;
+  const hours = -min / 2;
+  document.getElementById("timeline-min-label").innerHTML = hours >= 48
+    ? `−${Math.round(hours / 24)}&thinsp;T`
+    : `−${Math.round(hours)}&thinsp;h`;
+  if (timelineOffset < min) {
+    timelineOffset = min;
+    tl.value = min;
+    updateTimelineLabel();
+  }
 }
 
 async function load() {
@@ -399,6 +422,7 @@ async function load() {
   const data = await resp.json();
   stations = data.stations;
   document.getElementById("generated-at").textContent = data.generated_at.slice(0, 16).replace("T", " ");
+  updateTimelineRange(data.history_start);
 
   const laender = [...new Set(stations.map((s) => s.bundesland))].sort();
   const sel = document.getElementById("filter-land");
