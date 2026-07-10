@@ -610,16 +610,19 @@ function timelineDate() {
 function updateTimelineLabel() {
   const label = document.getElementById("timeline-label");
   const atNow = timelineOffset === 0;
-  if (!atNow) {
+  if (atNow) {
+    label.textContent = "jetzt";
+  } else {
     const d = timelineDate();
     // beyond 24 h the weekday alone is ambiguous — add the date
     const opts = timelineOffset < -48
       ? { weekday: "short", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }
       : { weekday: "short", hour: "2-digit", minute: "2-digit" };
-    label.textContent = "→ " + d.toLocaleString("de-DE", opts) + " Uhr";
+    label.textContent = d.toLocaleString("de-DE", opts) + " Uhr";
   }
-  label.classList.toggle("hidden", atNow);
-  document.getElementById("timeline-now").classList.toggle("hidden", atNow);
+  // Label und Button sind immer gerendert (Button nur deaktiviert), damit
+  // die Zeile beim Schieben nie umbricht oder springt
+  document.getElementById("timeline-now").disabled = atNow;
   document.querySelector(".timeline").classList.toggle("tl-past", !atNow);
 }
 

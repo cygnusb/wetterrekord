@@ -50,13 +50,15 @@ header h1 .claim { font-size: 0.8rem; font-weight: 400; color: #9aa4b5; letter-s
 .switch input:checked + .knob::after { transform: translateX(14px); background: #fff; }
 .switch:hover .knob { border-color: #4a5870; }
 
+/* eigene volle Zeile mit flexiblem Slider: Label und Button sind immer da
+   (feste Breite bzw. nur disabled), damit beim Schieben nichts springt */
 .timeline {
-  display: inline-flex; align-items: center; gap: 8px; margin-left: auto;
+  display: flex; flex: 1 1 100%; align-items: center; gap: 8px;
   background: #1a202b; border: 1px solid #2a3140; border-radius: 8px; padding: 3px 10px;
 }
 .timeline.tl-past { border-color: #ffd166; }
 .timeline input[type=range] {
-  -webkit-appearance: none; appearance: none; width: 170px; height: 18px;
+  -webkit-appearance: none; appearance: none; flex: 1; min-width: 80px; height: 18px;
   background: transparent; border: none; padding: 0; cursor: pointer;
 }
 /* der Browser-Fokusring passt nicht zum Custom-Slider; der aktive
@@ -82,10 +84,6 @@ header h1 .claim { font-size: 0.8rem; font-weight: 400; color: #9aa4b5; letter-s
 .timeline.tl-past input[type=range]::-moz-range-thumb { background: #ffd166; }
 .tl-caption { color: #9aa4b5; }
 .tl-end { color: #6b7688; font-size: 0.75rem; font-variant-numeric: tabular-nums; }
-/* fester Platzhalter für Zeitpunkt + Button, sonst springt die rechtsbündige
-   Box nach links, sobald beim Schieben das Label eingeblendet wird */
-.tl-extra { display: inline-flex; align-items: center; gap: 8px; min-width: 285px; }
-@media (max-width: 900px) { .tl-extra { min-width: 0; } }
 
 /* Mobil: Bedienelemente volle Breite, Slider dehnt sich, größere Touchziele */
 @media (max-width: 700px) {
@@ -96,24 +94,25 @@ header h1 .claim { font-size: 0.8rem; font-weight: 400; color: #9aa4b5; letter-s
   .controls { gap: 8px; }
   .mode-toggle { display: flex; flex: 1 1 100%; }
   .mode-toggle button { flex: 1; padding: 7px 4px; font-size: 0.8rem; }
-  .timeline {
-    flex: 1 1 100%; margin-left: 0; flex-wrap: wrap; justify-content: center;
-  }
-  .timeline input[type=range] { flex: 1 1 120px; width: auto; min-width: 100px; }
+  .timeline { flex-wrap: wrap; justify-content: center; }
+  .timeline input[type=range] { flex: 1 1 120px; min-width: 100px; }
   .timeline input[type=range]::-webkit-slider-thumb { width: 20px; height: 20px; margin-top: -8px; }
   .timeline input[type=range]::-moz-range-thumb { width: 18px; height: 18px; }
-  .tl-extra { justify-content: center; }
-  .tl-extra:empty { display: none; }
+  #timeline-label { min-width: 0; }
   .legend { font-size: 0.68rem; gap: 8px; }
 }
 #timeline-label {
-  color: #ffd166; font-weight: 600; font-variant-numeric: tabular-nums;
+  font-weight: 600; font-variant-numeric: tabular-nums;
+  min-width: 11.5em; text-align: center; color: #9aa4b5; flex-shrink: 0;
 }
+.tl-past #timeline-label { color: #ffd166; }
 #timeline-now {
   background: #ff8c42; color: #14181f; font-weight: 600; border: none;
   border-radius: 6px; padding: 3px 10px; cursor: pointer; font-size: 0.8rem;
+  flex-shrink: 0;
 }
-#timeline-now.hidden, #timeline-label.hidden, #filter-records-label.hidden { display: none; }
+#timeline-now:disabled { opacity: 0.35; cursor: default; }
+#filter-records-label.hidden { display: none; }
 
 .badge-near { background: transparent; border: 1.5px solid; }
 

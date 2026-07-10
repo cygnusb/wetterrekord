@@ -54,6 +54,19 @@ def _update(current: Record | None, value: float, day: date, kind: str) -> Recor
 # (e.g. Putbus with a 650 hPa "daily mean" at 40 m altitude).
 PM_PLAUSIBLE = (930.0, 1085.0)
 
+# Absolute gust cap: the German lowland record is ~51 m/s, Zugspitze holds
+# ~93 m/s (335 km/h). Values beyond are sensor errors (e.g. a lone
+# 84 m/s / 302 km/h spike at Greifswald on a calm day).
+FX_PLAUSIBLE_LOWLAND = 60.0  # m/s, stations below 1000 m
+FX_PLAUSIBLE_MOUNTAIN = 100.0
+
+
+def _fx_plausible(fx: float | None, altitude: float) -> float | None:
+    if fx is None:
+        return None
+    cap = FX_PLAUSIBLE_MOUNTAIN if altitude >= 1000 else FX_PLAUSIBLE_LOWLAND
+    return fx if fx <= cap else None
+
 
 def _reduce_pm(v: DailyValue, altitude: float) -> DailyValue:
     """Replace station-level PM with its sea-level reduction.
@@ -74,8 +87,10 @@ def _reduce_pm(v: DailyValue, altitude: float) -> DailyValue:
 
 
 def compute_records(values: list[DailyValue], altitude: float = 0.0) -> StationRecords:
-    if altitude:
-        values = [_reduce_pm(v, altitude) for v in values]
+    values = [
+        replace(_reduce_pm(v, altitude) if altitude else v, fx=_fx_plausible(v.fx, altitude))
+        for v in values
+    ]
     r = StationRecords()
     for param, kinds in PARAM_KINDS.items():
         years = [

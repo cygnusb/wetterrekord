@@ -133,6 +133,50 @@ def test_compute_records_pressure_plausibility(monkeypatch):
     assert r.alltime[("pressure", "low")].record_date == date(2001, 7, 7)
 
 
+def test_gust_neighbor_outlier_filter():
+    from wetterrekord.live import _filter_gust_outliers
+
+    # Greifswald scenario: a lone 84 m/s spike, calm neighbours around 10 m/s
+    def result(sid, gust, rows):
+        return [sid, "2026-07-10", 20.0, 12.0, gust, 0.0, 1015.0, "ts", rows]
+
+    meta = {
+        "A": (54.1, 13.4, 2.0),
+        "B": (54.2, 13.9, 10.0),  # ~35 km
+        "C": (53.9, 13.0, 40.0),  # ~35 km
+        "D": (48.0, 11.0, 20.0),  # far away, must not count
+    }
+    rows_a = [("t1", 20.0, 9.0, None, None), ("t2", 21.0, 84.0, None, None)]
+    results = [
+        result("A", 84.0, rows_a),
+        result("B", 10.1, []),
+        result("C", 11.5, []),
+        result("D", 12.0, []),
+    ]
+    out = {r[0]: r for r in _filter_gust_outliers(results, meta)}
+    assert out["A"][4] == 9.0  # spike dropped, valid max remains
+    assert out["A"][8][1][2] is None  # offending row fx nulled
+    assert out["B"][4] == 10.1  # untouched
+
+    # a genuine regional storm survives (neighbours are high too)
+    results = [result("A", 45.0, []), result("B", 38.0, []), result("C", 35.0, [])]
+    out = {r[0]: r for r in _filter_gust_outliers(results, meta)}
+    assert out["A"][4] == 45.0
+
+
+def test_fx_plausibility_cap(monkeypatch):
+    from wetterrekord import config
+
+    monkeypatch.setattr(config, "MIN_YEARS", 2)
+    values = [
+        DailyValue(date(2000, 7, 7), tmax=30.0, fx=25.0),
+        DailyValue(date(2001, 7, 7), tmax=30.0, fx=84.0),  # sensor error
+        DailyValue(date(2002, 7, 7), tmax=30.0, fx=30.0),
+    ]
+    r = compute_records(values)
+    assert r.alltime[("gust", "high")].value == 30.0
+
+
 def test_compute_records_min_years_per_param():
     # 31 years of temperature, but only one year of wind: no gust records
     values = [DailyValue(date(1990 + i, 7, 7), tmax=30.0) for i in range(31)]
