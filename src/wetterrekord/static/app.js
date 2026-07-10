@@ -656,9 +656,13 @@ function updateTimelineRange(historyStart) {
     ? `−${Math.round(hours / 24)}&thinsp;T`
     : `−${Math.round(hours)}&thinsp;h`;
   if (timelineOffset < min) {
+    // z. B. ein geteilter Link auf einen Zeitpunkt ohne Daten mehr:
+    // auf den ältesten verfügbaren begrenzen und dafür laden
+    // (beim zweiten Durchlauf wird nicht mehr geklemmt — keine Schleife)
     timelineOffset = min;
     tl.value = min;
     updateTimelineLabel();
+    load();
   }
 }
 
@@ -771,6 +775,48 @@ document.getElementById("timeline-now").addEventListener("click", () => {
   updateTimelineLabel();
   load();
 });
+
+// Share-Link: kodiert Zeitpunkt und Modus; funktioniert nur so weit zurück,
+// wie Messwerte aufbewahrt werden (30 Tage) — der Empfänger wird per
+// updateTimelineRange auf den ältesten verfügbaren Zeitpunkt begrenzt
+const shareBtn = document.getElementById("timeline-share");
+shareBtn.addEventListener("click", async () => {
+  const url = new URL(location.origin + location.pathname);
+  if (mode !== "heat") url.searchParams.set("mode", mode);
+  if (timelineOffset !== 0) url.searchParams.set("at", timelineDate().toISOString());
+  const link = url.toString();
+  if (navigator.share) {
+    try {
+      await navigator.share({ title: document.title, url: link });
+      return;
+    } catch (e) { /* abgebrochen — auf Kopieren zurückfallen */ }
+  }
+  try {
+    await navigator.clipboard.writeText(link);
+    shareBtn.textContent = "✓ kopiert";
+  } catch (e) {
+    window.prompt("Link kopieren:", link); // Fallback ohne Clipboard-Zugriff
+  }
+  setTimeout(() => { shareBtn.textContent = "🔗 Teilen"; }, 1500);
+});
+
+// beim Start ?mode= und ?at= aus einem geteilten Link übernehmen
+{
+  const params = new URLSearchParams(location.search);
+  const m = params.get("mode");
+  if (MODES[m]) {
+    mode = m;
+    setToggle(MODE_BUTTON_IDS, "mode-" + m);
+  }
+  const at = new Date(params.get("at") ?? NaN);
+  if (!isNaN(at)) {
+    const steps = Math.round((at - Date.now()) / (30 * 60 * 1000));
+    if (steps < 0) {
+      timelineOffset = Math.max(steps, MAX_TIMELINE_OFFSET);
+      timeline.value = timelineOffset;
+    }
+  }
+}
 
 // About-Sektion: nur beim ersten Besuch aufgeklappt; eingeklappt verschwindet
 // sie komplett und wird über den Footer-Link wieder geöffnet

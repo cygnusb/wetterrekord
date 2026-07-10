@@ -89,6 +89,9 @@ def render(data: dict) -> bytes:
     # ("near record" is deliberately not shown in the shared image)
     plain, broken = [], []
     counts = {"heat": 0, "cold": 0, "gust": 0, "precip": 0, "pressure": 0}
+    # "2 Rekorde gebrochen" alone is misleading when both are mere daily
+    # records — the level breakdown puts the headline number in perspective
+    level_counts = {"alltime": 0, "month": 0, "quinzaine": 0, "day": 0}
     hottest = coldest = None
     for st in stations:
         params = st.get("params", {})
@@ -99,6 +102,11 @@ def render(data: dict) -> bytes:
         counts["pressure"] += sum(
             1 for key in ("phigh", "plow") if params.get(key, {}).get("status", {}).get("level")
         )
+        for status in (st["heat"], st["cold"]) + tuple(
+            params.get(k, {}).get("status", {}) for k in ("gust", "precip", "phigh", "plow")
+        ):
+            if status.get("level"):
+                level_counts[status["level"]] += 1
         if st["tmax_today"] is not None and (hottest is None or st["tmax_today"] > hottest["tmax_today"]):
             hottest = st
         if st["tmin_today"] is not None and (coldest is None or st["tmin_today"] < coldest["tmin_today"]):
@@ -164,11 +172,23 @@ def render(data: dict) -> bytes:
         d.text((xc + 22, y), label, font=_font(24), fill=TEXT)
         xc += 22 + d.textlength(label, font=_font(24)) + 26
 
-    y = 420
+    level_labels = {
+        "alltime": "Allzeitrekord",
+        "month": "Monatsrekord",
+        "quinzaine": "Halbmonatsrekord",
+        "day": "Tagesrekord",
+    }
+    breakdown = " · ".join(
+        f"{n}× {level_labels[lvl]}" for lvl, n in level_counts.items() if n
+    )
+    if breakdown:
+        d.text((x, 390), f"davon {breakdown}", font=_font(22), fill=MUTED)
+
+    y = 426
     if hottest:
         d.text((x, y), f"Höchste Temperatur: {_fmt(hottest['tmax_today'])}", font=_font(26), fill=TEXT)
         d.text((x, y + 36), hottest["name"], font=_font(24), fill=MUTED)
-        y += 88
+        y += 80
     if coldest:
         d.text((x, y), f"Tiefste Temperatur: {_fmt(coldest['tmin_today'])}", font=_font(26), fill=TEXT)
         d.text((x, y + 36), coldest["name"], font=_font(24), fill=MUTED)

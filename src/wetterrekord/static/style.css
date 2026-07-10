@@ -112,6 +112,12 @@ header h1 .claim { font-size: 0.8rem; font-weight: 400; color: #9aa4b5; letter-s
   flex-shrink: 0;
 }
 #timeline-now:disabled { opacity: 0.35; cursor: default; }
+#timeline-share {
+  background: transparent; color: #9aa4b5; border: 1px solid #3a4557;
+  border-radius: 6px; padding: 3px 10px; cursor: pointer; font-size: 0.8rem;
+  flex-shrink: 0;
+}
+#timeline-share:hover { color: #e8e8e8; border-color: #4a5870; }
 #filter-records-label.hidden { display: none; }
 
 .badge-near { background: transparent; border: 1.5px solid; }
