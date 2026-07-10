@@ -13,6 +13,7 @@ jobs:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
       - run: uv sync --frozen
+      - run: uvx ruff check src/ tests/
       - run: uv run pytest
 
   docker:

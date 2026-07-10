@@ -164,6 +164,6 @@ def poll_all(conn: sqlite3.Connection, client: DwdClient | None = None) -> None:
                 [(sid, ts.isoformat(), tt, fx, rr, ppv) for ts, tt, fx, rr, ppv in rows],
             )
         conn.execute("DELETE FROM measurements WHERE ts < ?", (cutoff,))
-    log.info("Live poll done: %d/%d stations with data for today", len(results), len(station_ids))
+    log.info("Live poll done: %d/%d stations with data for today", len(results), len(meta))
     if own_client:
         client.close()
