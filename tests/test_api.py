@@ -39,7 +39,7 @@ def test_api_stations_history_start(tmp_path: Path, monkeypatch):
     import wetterrekord.app as app_mod
 
     conn = db.connect(tmp_path / "test.sqlite")
-    monkeypatch.setattr(app_mod, "conn", conn)
+    monkeypatch.setattr(app_mod, "request_conn", lambda: conn)
     assert app_mod.api_stations()["history_start"] is None
     conn.execute(
         "INSERT INTO measurements VALUES (?,?,?,?,?,?)",
@@ -208,7 +208,8 @@ def test_og_image_render():
 def test_og_image_endpoint(tmp_path, monkeypatch):
     from wetterrekord import app as appmod
 
-    monkeypatch.setattr(appmod, "conn", db.connect(tmp_path / "og.sqlite"))
+    test_conn = db.connect(tmp_path / "og.sqlite")
+    monkeypatch.setattr(appmod, "request_conn", lambda: test_conn)
     monkeypatch.setattr(appmod, "_og_cache", None)
     client = _client()
     resp = client.get("/og-image.png")

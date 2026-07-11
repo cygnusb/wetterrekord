@@ -27,6 +27,17 @@ except importlib.metadata.PackageNotFoundError:
     VERSION = "dev"
 
 conn: sqlite3.Connection | None = None
+# Request handlers run in the threadpool; sharing one sqlite3 connection
+# across threads (and with the scheduler) interleaves cursors under load —
+# statements then return no rows. Each request thread gets its own
+# connection instead (WAL mode allows concurrent readers).
+_request_conns = threading.local()
+
+
+def request_conn() -> sqlite3.Connection:
+    if not hasattr(_request_conns, "conn"):
+        _request_conns.conn = db.connect()
+    return _request_conns.conn
 # True while the (re-)ingest of the DWD history runs; the frontend blocks
 # with a notice because records are inconsistent during the rebuild.
 ingest_running = False
@@ -189,6 +200,7 @@ def past_values(db_conn: sqlite3.Connection, at: datetime) -> dict[str, tuple]:
 
 @app.get("/api/stations")
 def api_stations(at: str | None = None):
+    c = request_conn()
     tz = ZoneInfo(config.LOCAL_TZ)
     now_local = datetime.now(tz)
     if at is not None:
@@ -203,7 +215,7 @@ def api_stations(at: str | None = None):
         at_dt = at_dt.astimezone(tz)
         if at_dt > now_local:
             raise HTTPException(status_code=400, detail="'at' must not be in the future")
-        values = past_values(conn, at_dt)
+        values = past_values(c, at_dt)
         target_date = at_dt.date()
         generated_at = at_dt
     else:
@@ -218,7 +230,7 @@ def api_stations(at: str | None = None):
                 r["pp_today"],
                 r["last_measurement_at"],
             )
-            for r in conn.execute(
+            for r in c.execute(
                 "SELECT * FROM live_state WHERE date = ?", (target_date.isoformat(),)
             )
         }
@@ -228,23 +240,23 @@ def api_stations(at: str | None = None):
 
     daily = {
         (r["station_id"], r["param"], r["kind"]): r
-        for r in conn.execute(
+        for r in c.execute(
             "SELECT * FROM daily_records WHERE month = ? AND day = ?", (month, day)
         )
     }
     quinzaine = {
         (r["station_id"], r["param"], r["kind"]): r
-        for r in conn.execute(
+        for r in c.execute(
             "SELECT * FROM quinzaine_records WHERE month = ? AND half = ?", (month, half)
         )
     }
     monthly = {
         (r["station_id"], r["param"], r["kind"]): r
-        for r in conn.execute("SELECT * FROM monthly_records WHERE month = ?", (month,))
+        for r in c.execute("SELECT * FROM monthly_records WHERE month = ?", (month,))
     }
     alltime = {
         (r["station_id"], r["param"], r["kind"]): r
-        for r in conn.execute("SELECT * FROM alltime_records")
+        for r in c.execute("SELECT * FROM alltime_records")
     }
 
     def levels(sid: str, param: str, kind: str) -> dict:
@@ -264,7 +276,7 @@ def api_stations(at: str | None = None):
         }
 
     stations = []
-    for s in conn.execute("SELECT * FROM stations"):
+    for s in c.execute("SELECT * FROM stations"):
         sid = s["id"]
         tmax_today, tmin_today, gust, rain, pp, last_measurement = values.get(
             sid, (None, None, None, None, None, None)
@@ -298,7 +310,7 @@ def api_stations(at: str | None = None):
         "date": target_date.isoformat(),
         "generated_at": generated_at.isoformat(),
         # oldest stored measurement — the frontend limits the timeline to this
-        "history_start": conn.execute("SELECT MIN(ts) FROM measurements").fetchone()[0],
+        "history_start": c.execute("SELECT MIN(ts) FROM measurements").fetchone()[0],
         "ingest_running": ingest_running,
         "stations": stations,
     }
@@ -306,7 +318,8 @@ def api_stations(at: str | None = None):
 
 @app.get("/api/stations/{station_id}")
 def api_station_detail(station_id: str):
-    s = conn.execute("SELECT * FROM stations WHERE id = ?", (station_id,)).fetchone()
+    c = request_conn()
+    s = c.execute("SELECT * FROM stations WHERE id = ?", (station_id,)).fetchone()
     if s is None:
         raise HTTPException(status_code=404, detail="unknown station")
     monthly = [
@@ -317,16 +330,16 @@ def api_station_detail(station_id: str):
             "value": r["value"],
             "date": r["record_date"],
         }
-        for r in conn.execute(
+        for r in c.execute(
             "SELECT * FROM monthly_records WHERE station_id = ? ORDER BY param, month",
             (station_id,),
         )
     ]
     alltime = [
         {"param": r["param"], "kind": r["kind"], "value": r["value"], "date": r["record_date"]}
-        for r in conn.execute("SELECT * FROM alltime_records WHERE station_id = ?", (station_id,))
+        for r in c.execute("SELECT * FROM alltime_records WHERE station_id = ?", (station_id,))
     ]
-    lr = conn.execute("SELECT * FROM live_state WHERE station_id = ?", (station_id,)).fetchone()
+    lr = c.execute("SELECT * FROM live_state WHERE station_id = ?", (station_id,)).fetchone()
     return {
         "id": s["id"],
         "name": s["name"],
