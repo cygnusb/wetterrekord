@@ -1,6 +1,6 @@
 [project]
 name = "wetterrekord"
-version = "1.5.1"
+version = "1.6.0"
 description = "Temperature records in Germany — live map based on DWD open data"
 readme = "README.md"
 authors = [
