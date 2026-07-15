@@ -992,12 +992,20 @@ function setUiMode(next) {
       mode = "heat";
       setToggle(MODE_BUTTON_IDS, "mode-heat");
     }
-    // Simple: map only, no filter panel
+    // Simple: map only, no filter panel / timeline — stay on live data
     if (view !== "map") {
       view = "map";
       setToggle(["view-map", "view-table"], "view-map");
     }
     setFilterPanelOpen(false, { persist: false });
+    if (timelineOffset !== 0) {
+      timelineOffset = 0;
+      const tl = document.getElementById("timeline");
+      if (tl) tl.value = 0;
+      updateTimelineLabel();
+      load();
+      return; // load() already renders
+    }
   } else {
     // Advanced: restore filter panel preference / viewport default
     syncFilterPanelToViewport();
@@ -1125,14 +1133,17 @@ shareBtn.addEventListener("click", async () => {
     dataView = dv;
     setToggle(["data-records", "data-now"], dataView === "now" ? "data-now" : "data-records");
   }
-  const raw = params.get("at");
-  // Unix-Sekunden (neue Links) oder ISO-String (alte Links)
-  const at = raw === null ? NaN : /^\d+$/.test(raw) ? new Date(raw * 1000) : new Date(raw);
-  if (!isNaN(at)) {
-    const steps = Math.round((at - Date.now()) / (30 * 60 * 1000));
-    if (steps < 0) {
-      timelineOffset = Math.max(steps, MAX_TIMELINE_OFFSET);
-      timeline.value = timelineOffset;
+  // Timeline (Rückblick) is Advanced-only — ignore ?at= in Simple
+  if (!isSimpleMode()) {
+    const raw = params.get("at");
+    // Unix-Sekunden (neue Links) oder ISO-String (alte Links)
+    const at = raw === null ? NaN : /^\d+$/.test(raw) ? new Date(raw * 1000) : new Date(raw);
+    if (!isNaN(at)) {
+      const steps = Math.round((at - Date.now()) / (30 * 60 * 1000));
+      if (steps < 0) {
+        timelineOffset = Math.max(steps, MAX_TIMELINE_OFFSET);
+        timeline.value = timelineOffset;
+      }
     }
   }
 }
