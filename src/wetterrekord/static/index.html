@@ -68,7 +68,7 @@
     <div class="controls filter-controls">
       <select id="filter-land"><option value="">Alle Bundesländer</option></select>
       <label id="filter-alt-label">Höhe ≤ <input type="number" id="filter-alt" placeholder="∞" min="0" step="100"> m</label>
-      <label id="filter-years-label">Historie ≥ <input type="number" id="filter-years" value="{{MIN_YEARS}}" min="0" step="1"> J.</label>
+      <label id="filter-years-label" title="optional: nur Stationen mit mindestens N Jahren Messreihe (leer = alle). Stationen sind serverseitig bereits auf ≥{{MIN_YEARS}} Jahre Stationslaufzeit gefiltert; die reale Temperaturserie kann kürzer sein.">Historie ≥ <input type="number" id="filter-years" value="" min="0" step="1" placeholder="alle"> J.</label>
       <label class="switch" id="filter-records-label"><input type="checkbox" id="filter-records"><span class="knob"></span> nur Rekorde</label>
       <label class="switch hidden" id="filter-now-missing-label"><input type="checkbox" id="filter-now-missing"><span class="knob"></span> ohne Messung</label>
       <label class="switch" id="overlay-label" title="interpolierte Messwert-Farbfläche über Deutschland"><input type="checkbox" id="overlay-toggle"><span class="knob"></span> Farbfläche</label>

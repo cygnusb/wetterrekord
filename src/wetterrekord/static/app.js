@@ -810,11 +810,10 @@ function filtersAreActive() {
   const land = document.getElementById("filter-land").value;
   const alt = document.getElementById("filter-alt").value;
   const years = document.getElementById("filter-years").value;
-  const defaultYears = document.getElementById("filter-years").defaultValue
-    || document.getElementById("filter-years").getAttribute("value");
   if (land) return true;
   if (alt !== "") return true;
-  if (dataView === "records" && years !== "" && years !== defaultYears) return true;
+  // empty = no history filter (server already selected stations)
+  if (dataView === "records" && years !== "") return true;
   if (dataView === "records" && recordsOnly[view]) return true;
   if (dataView === "now" && showNowMissing) return true;
   if (timelineOffset !== 0) return true;
