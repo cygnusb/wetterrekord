@@ -11,6 +11,8 @@ TZ = ZoneInfo("Europe/Berlin")
 
 
 def test_past_values_aggregation(tmp_path: Path):
+    from wetterrekord.app import latest_measurements
+
     conn = db.connect(tmp_path / "test.sqlite")
     rows = [
         # previous day — must not leak into the aggregation
@@ -34,6 +36,12 @@ def test_past_values_aggregation(tmp_path: Path):
     assert values["00002"] == (22.2, 22.2, None, None, None, "2026-07-08T12:10:00+02:00")
     assert "00003" not in values
 
+    latest = latest_measurements(conn, at)
+    assert latest["00001"]["tt"] == 28.4
+    assert latest["00001"]["fx"] == 22.5
+    assert latest["00001"]["ts"] == "2026-07-08T12:00:00+02:00"
+    assert latest["00002"]["tt"] == 22.2
+
 
 def test_api_stations_history_start(tmp_path: Path, monkeypatch):
     import wetterrekord.app as app_mod
@@ -42,10 +50,37 @@ def test_api_stations_history_start(tmp_path: Path, monkeypatch):
     monkeypatch.setattr(app_mod, "request_conn", lambda: conn)
     assert app_mod.api_stations()["history_start"] is None
     conn.execute(
-        "INSERT INTO measurements VALUES (?,?,?,?,?,?)",
-        ("00001", "2026-07-01T12:00:00+02:00", 20.0, None, None, None),
+        "INSERT INTO stations VALUES ('00001', 'Test', 'Hessen', 50.0, 9.0, 100, 1990, 2026)"
     )
-    assert app_mod.api_stations()["history_start"] == "2026-07-01T12:00:00+02:00"
+    # measurement on "today" so the live `now` field is populated
+    today_ts = datetime.now(TZ).replace(hour=12, minute=0, second=0, microsecond=0).isoformat()
+    conn.execute(
+        "INSERT INTO measurements VALUES (?,?,?,?,?,?)",
+        ("00001", today_ts, 20.0, 5.0, 0.2, 1013.0),
+    )
+    data = app_mod.api_stations()
+    assert data["history_start"] == today_ts
+    st = data["stations"][0]
+    assert st["history_years"] == 37
+    assert st["last_year"] == 2026
+    assert st["now"]["tt"] == 20.0
+    assert st["now"]["fx"] == 5.0
+
+
+def test_status_endpoints(tmp_path: Path, monkeypatch):
+    import wetterrekord.app as app_mod
+
+    conn = db.connect(tmp_path / "status.sqlite")
+    monkeypatch.setattr(app_mod, "request_conn", lambda: conn)
+    monkeypatch.setattr(config, "DB_PATH", tmp_path / "status.sqlite")
+    monkeypatch.setattr(config, "CACHE_DIR", tmp_path / "cache")
+    client = _client()
+    html = client.get("/_status")
+    assert html.status_code == 200
+    assert "Betriebsstatus" in html.text
+    payload = client.get("/_status.json").json()
+    assert payload["tables"]["stations"] == 0
+    assert "version" in payload
 
 
 def test_pressure_sea_level_migration(tmp_path: Path):

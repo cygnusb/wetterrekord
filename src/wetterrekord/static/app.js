@@ -34,6 +34,8 @@ const LEVEL_LABEL = { alltime: "Allzeit", month: "Monat", quinzaine: "Halbmonat"
 const LEVEL_LABEL_LONG = {
   alltime: "Allzeitrekord", month: "Monatsrekord", quinzaine: "Halbmonatsrekord", day: "Tagesrekord",
 };
+const SIMPLE_MODES = ["heat", "cold"];
+const SIMPLE_LEVELS = ["alltime", "month", "day"];
 
 // Stationsname/Bundesland stammen aus DWD-Dateien — Fremddaten, die nie
 // ungeescaped in innerHTML landen dürfen
@@ -133,14 +135,18 @@ function pressWinner(st) {
 
 let mode = "heat";
 let view = "map";
+let dataView = "records"; // records | now
+let uiMode = localStorage.getItem("wetterrekordUiMode") || "simple";
 let stations = [];
 let markers = new Map();
 let sortKey = "recordAge";
 let sortDir = -1;
 let timelineOffset = 0; // 0 = jetzt, negative Schritte à 30 min
 let selectedStationId = null;
+let showNowMissing = false;
 // "nur Rekorde" gilt pro Ansicht: Tabelle standardmäßig an, Karte aus
 const recordsOnly = { map: false, table: true };
+const MOBILE_MQ = window.matchMedia("(max-width: 700px)");
 
 // Touch-Geräte: Hover existiert nicht — iOS emuliert beim ersten Tap ein
 // mouseover (Tooltip blitzt auf, Klick geht verloren). Dort gibt es keine
@@ -222,7 +228,8 @@ function idw(pts, x, y) {
 
 function overlayPoints() {
   return stations
-    .map((st) => ({ x: st.lon, y: st.lat, v: stToday(st) }))
+    .filter(passesFilter)
+    .map((st) => ({ x: st.lon, y: st.lat, v: activeValue(st) }))
     .filter((p) => p.v !== null && p.v !== undefined);
 }
 
@@ -235,7 +242,13 @@ function renderOverlay() {
     overlayKey = null;
     return;
   }
-  const key = `${mode}|${dataStamp}|${map.getBounds().toBBoxString()}`;
+  const filterKey = [
+    document.getElementById("filter-land").value,
+    document.getElementById("filter-alt").value,
+    document.getElementById("filter-years").value,
+    showNowMissing ? "1" : "0",
+  ].join("|");
+  const key = `${mode}|${dataView}|${filterKey}|${dataStamp}|${map.getBounds().toBBoxString()}`;
   if (key === overlayKey) return;
   overlayKey = key;
 
@@ -344,8 +357,29 @@ function stStatus(st) {
 function stToday(st) {
   return MODES[mode].value(st);
 }
+function nowValue(st) {
+  const n = st.now || {};
+  if (mode === "heat" || mode === "cold") return n.tt;
+  if (mode === "gust") return n.fx;
+  if (mode === "precip") return n.rr;
+  if (mode === "press") return n.pp;
+  return null;
+}
+function activeValue(st) {
+  return dataView === "now" ? nowValue(st) : stToday(st);
+}
 function stRecords(st) {
   return MODES[mode].records(st);
+}
+function isSimpleMode() {
+  return uiMode === "simple";
+}
+function displayLevel(level) {
+  return isSimpleMode() && level === "quinzaine" ? "day" : level;
+}
+function levelLongLabel(level) {
+  if (isSimpleMode() && level === "day") return "Kalendertag";
+  return LEVEL_LABEL_LONG[level];
 }
 // Status einer Station im aktiven Modus: {type: broken|near|none|nodata, level}
 function statusInfo(st) {
@@ -356,12 +390,16 @@ function statusInfo(st) {
   }
   const s = stStatus(st);
   const kind = mode === "press" ? pressWinner(st).kind : null;
-  if (s.level) return { type: "broken", level: s.level, kind };
-  if (s.near) return { type: "near", level: s.near, kind };
+  if (s.level) return { type: "broken", level: displayLevel(s.level), sourceLevel: s.level, kind };
+  if (s.near) return { type: "near", level: displayLevel(s.near), sourceLevel: s.near, kind };
   return { type: "none", level: null };
 }
 function badgeText(info) {
   const prefix = info.kind ? (info.kind === "high" ? "Hochdruck: " : "Tiefdruck: ") : "";
+  if (isSimpleMode() && info.level === "day") {
+    if (info.type === "broken") return prefix + "Rekord gebrochen";
+    if (info.type === "near") return prefix + "nah am Rekord";
+  }
   if (info.type === "broken") return `${prefix}${LEVEL_LABEL_LONG[info.level]} gebrochen`;
   if (info.type === "near") return `${prefix}nah am ${LEVEL_LABEL_LONG[info.level]}`;
   if (info.type === "nodata") return "keine Daten";
@@ -385,6 +423,28 @@ function recordAge(st) {
   const y = recordYear(st);
   return y === null ? null : new Date().getFullYear() - y;
 }
+function historyYears(st) {
+  return st.history_years ?? (st.last_year && st.first_year ? st.last_year - st.first_year + 1 : null);
+}
+function comparisonSign(st) {
+  if (mode === "cold") return -1;
+  if (mode === "press") return pressWinner(st).kind === "low" ? -1 : 1;
+  return 1;
+}
+function simpleComparison(st, info) {
+  const recs = stRecords(st);
+  const sourceLevel = info.sourceLevel || info.level || "day";
+  const rec = recs[sourceLevel] || recs[info.level] || recs.month || recs.day || recs.alltime;
+  const current = stToday(st);
+  if (!rec || current === null || current === undefined) return "";
+  const diff = comparisonSign(st) * (current - rec.value);
+  const diffText = `${diff >= 0 ? "+" : ""}${MODES[mode].fmt(diff)}`;
+  return `<div class="simple-comparison">
+    <div><span>aktuell</span><b>${MODES[mode].fmt(current)}</b></div>
+    <div><span>Rekord</span><b>${MODES[mode].fmt(rec.value)}</b><em>${fmtDate(rec.date)}</em></div>
+    <div><span>Differenz</span><b>${diffText}</b></div>
+  </div>`;
+}
 
 function fmtDate(iso) {
   if (!iso) return "–";
@@ -397,6 +457,13 @@ function passesFilter(st) {
   if (land && st.bundesland !== land) return false;
   const maxAlt = document.getElementById("filter-alt").value;
   if (maxAlt !== "" && st.altitude > Number(maxAlt)) return false;
+  if (dataView === "records") {
+    const minYears = document.getElementById("filter-years").value;
+    const years = historyYears(st);
+    if (minYears !== "" && years !== null && years < Number(minYears)) return false;
+  } else if (!showNowMissing && (nowValue(st) === null || nowValue(st) === undefined)) {
+    return false;
+  }
   return true;
 }
 function filtered() {
@@ -410,15 +477,34 @@ function brokenCount(st, m) {
 function renderStats() {
   const c = levelColors();
   const visible = filtered();
-  const counts = Object.fromEntries(Object.keys(MODES).map((m) => [m, 0]));
+  if (dataView === "now") {
+    const values = visible
+      .map((st) => ({ st, value: nowValue(st) }))
+      .filter((row) => row.value !== null && row.value !== undefined);
+    const strongest = values.slice().sort((a, b) => b.value - a.value)[0];
+    const weakest = values.slice().sort((a, b) => a.value - b.value)[0];
+    const parts = [
+      `<span class="stat"><b>${values.length}</b> Station${values.length === 1 ? "" : "en"} mit Messung</span>`,
+    ];
+    if (strongest) {
+      parts.push(`<span class="stat">max <b>${esc(strongest.st.name)}</b> ${MODES[mode].fmt(strongest.value)}</span>`);
+    }
+    if (weakest && weakest.st.id !== strongest?.st.id) {
+      parts.push(`<span class="stat">min <b>${esc(weakest.st.name)}</b> ${MODES[mode].fmt(weakest.value)}</span>`);
+    }
+    document.getElementById("stats").innerHTML = parts.join(" · ");
+    return;
+  }
+  const statModes = isSimpleMode() ? SIMPLE_MODES : Object.keys(MODES);
+  const counts = Object.fromEntries(statModes.map((m) => [m, 0]));
   const broken = { alltime: 0, month: 0, quinzaine: 0, day: 0 };
   let oldest = null;
   for (const st of visible) {
-    for (const m of Object.keys(MODES)) counts[m] += brokenCount(st, m);
+    for (const m of statModes) counts[m] += brokenCount(st, m);
     const info = statusInfo(st);
     if (info.type === "broken") {
       broken[info.level]++;
-      const rec = stRecords(st)[info.level];
+      const rec = stRecords(st)[info.sourceLevel || info.level];
       if (rec) {
         const year = Number(rec.date.slice(0, 4));
         const age = new Date().getFullYear() - year;
@@ -428,13 +514,12 @@ function renderStats() {
   }
   const total = Object.values(counts).reduce((a, b) => a + b, 0);
   const when = timelineOffset === 0 ? "Heute" : "Zu diesem Zeitpunkt";
-  const breakdown = Object.entries(MODES)
-    .map(([m, cfg]) => `${cfg.icon} ${counts[m]}`)
-    .join(" · ");
+  const breakdown = statModes.map((m) => `${MODES[m].icon} ${counts[m]}`).join(" · ");
   const parts = [
     `<span class="stat"><b>${total}</b> Rekord${total === 1 ? "" : "e"} gebrochen (${when}: ${breakdown})</span>`,
   ];
-  for (const lvl of ["alltime", "month", "quinzaine", "day"]) {
+  const levels = isSimpleMode() ? SIMPLE_LEVELS : ["alltime", "month", "quinzaine", "day"];
+  for (const lvl of levels) {
     if (broken[lvl]) parts.push(`<span class="stat"><i style="background:${c[lvl]}"></i>${broken[lvl]}× ${LEVEL_LABEL[lvl]}</span>`);
   }
   if (oldest) {
@@ -445,8 +530,13 @@ function renderStats() {
 
 // ---- Karte ----
 function tempLabel(st) {
-  const v = stToday(st);
+  const v = activeValue(st);
   return v === null || v === undefined ? "" : MODES[mode].short(v);
+}
+function scaleFill(v) {
+  if (v === null || v === undefined) return NODATA_COLOR;
+  const [r, g, b] = scaleColor(MODES[mode].scale, v);
+  return `rgb(${Math.round(r)}, ${Math.round(g)}, ${Math.round(b)})`;
 }
 // Markergröße wächst mit dem Zoom: in der Deutschland-Übersicht klein,
 // beim Reinzoomen größer (Faktor 1 bei Zoom 8)
@@ -460,7 +550,7 @@ function renderMap() {
   for (const st of stations) {
     const m = markers.get(st.id);
     const info = statusInfo(st);
-    const hideNonRecord = recordsOnly.map && info.type !== "broken";
+    const hideNonRecord = dataView === "records" && recordsOnly.map && info.type !== "broken";
     if (view !== "map" || !passesFilter(st) || hideNonRecord) {
       m.unbindTooltip();
       map.removeLayer(m);
@@ -468,27 +558,48 @@ function renderMap() {
     }
     if (!map.hasLayer(m)) m.addTo(map);
     m.unbindTooltip();
-    if (recordsOnly.map) {
+    if (dataView === "now") {
+      const v = nowValue(st);
+      if (!IS_TOUCH) {
+        m.bindTooltip(
+          `<b>${esc(st.name)}</b><br>${MODES[mode].fmt(v)}${st.now?.ts ? "<br>" + st.now.ts.slice(11, 16) : ""}`,
+          { direction: "top", offset: [0, -6], className: "temp-label" },
+        );
+      }
+      m.setStyle({
+        fillColor: scaleFill(v),
+        fillOpacity: 0.95,
+        color: "#0b0e13",
+        weight: 1,
+        radius: (v === null || v === undefined ? 4.5 : 6) * zf,
+      });
+    } else if (recordsOnly.map) {
       // im Nur-Rekorde-Modus den Messwert permanent an der Station anzeigen
       m.bindTooltip(tempLabel(st), {
         permanent: true, direction: "top", offset: [0, -6], className: "temp-label",
       });
-    } else if (!IS_TOUCH) {
-      m.bindTooltip(`<b>${esc(st.name)}</b><br>${MODES[mode].fmt(stToday(st))}`, {
-        direction: "top", offset: [0, -6], className: "temp-label",
-      });
-    }
-    if (info.type === "broken") {
-      m.setStyle({ fillColor: c[info.level], fillOpacity: 0.95, color: "#0b0e13", weight: 1, radius: 7 * zf });
-      m.bringToFront();
-    } else if (info.type === "near") {
-      m.setStyle({ fillColor: c[info.level], fillOpacity: 0.15, color: c[info.level], weight: 2.5, radius: 7 * zf });
-      m.bringToFront();
+      if (info.type === "broken") {
+        m.setStyle({ fillColor: c[info.level], fillOpacity: 0.95, color: "#0b0e13", weight: 1, radius: 7 * zf });
+        m.bringToFront();
+      }
     } else {
-      m.setStyle({
-        fillColor: info.type === "nodata" ? NODATA_COLOR : NONE_COLOR,
-        fillOpacity: 0.95, color: "#0b0e13", weight: 1, radius: 4.5 * zf,
-      });
+      if (!IS_TOUCH) {
+        m.bindTooltip(`<b>${esc(st.name)}</b><br>${MODES[mode].fmt(stToday(st))}`, {
+          direction: "top", offset: [0, -6], className: "temp-label",
+        });
+      }
+      if (info.type === "broken") {
+        m.setStyle({ fillColor: c[info.level], fillOpacity: 0.95, color: "#0b0e13", weight: 1, radius: 7 * zf });
+        m.bringToFront();
+      } else if (info.type === "near") {
+        m.setStyle({ fillColor: c[info.level], fillOpacity: 0.15, color: c[info.level], weight: 2.5, radius: 7 * zf });
+        m.bringToFront();
+      } else {
+        m.setStyle({
+          fillColor: info.type === "nodata" ? NODATA_COLOR : NONE_COLOR,
+          fillOpacity: 0.95, color: "#0b0e13", weight: 1, radius: 4.5 * zf,
+        });
+      }
     }
   }
 }
@@ -498,6 +609,7 @@ const COLUMNS = [
   { key: "name", label: "Station", value: (st) => st.name },
   { key: "bundesland", label: "Bundesland", value: (st) => st.bundesland },
   { key: "altitude", label: "Höhe (m)", value: (st) => st.altitude, num: true },
+  { key: "history", label: "Historie (J.)", value: historyYears, num: true },
   { key: "today", label: "aktuell", value: (st) => stToday(st), num: true, fmt: (v) => MODES[mode].fmt(v) },
   {
     key: "record", label: "Tagesrekord", num: true,
@@ -506,33 +618,46 @@ const COLUMNS = [
   { key: "recordAge", label: "Rekord von", value: (st) => recordYear(st), num: true },
   { key: "status", label: "Status", value: (st) => statusInfo(st) },
 ];
+const NOW_COLUMNS = [
+  { key: "name", label: "Station", value: (st) => st.name },
+  { key: "bundesland", label: "Bundesland", value: (st) => st.bundesland },
+  { key: "altitude", label: "Höhe (m)", value: (st) => st.altitude, num: true },
+  { key: "now", label: "jetzt", value: nowValue, num: true, fmt: (v) => MODES[mode].fmt(v) },
+  { key: "measured", label: "Messung", value: (st) => (st.now?.ts ? st.now.ts.slice(11, 16) : null) },
+  { key: "history", label: "Historie (J.)", value: historyYears, num: true },
+];
 const STATUS_ORDER = { broken: 0, near: 1, none: 2, nodata: 3 };
 const LEVEL_ORDER = { alltime: 0, month: 1, quinzaine: 2, day: 3, null: 4 };
 
 function renderTable() {
   let rows = filtered();
-  if (recordsOnly.table) {
+  if (dataView === "records" && recordsOnly.table) {
     rows = rows.filter((st) => statusInfo(st).type === "broken");
   }
+  const columns = dataView === "now" ? NOW_COLUMNS : COLUMNS;
+  if (!columns.some((c) => c.key === sortKey)) {
+    sortKey = dataView === "now" ? "now" : "recordAge";
+    sortDir = -1;
+  }
   rows = rows.slice().sort((a, b) => {
-    const col = COLUMNS.find((x) => x.key === sortKey);
+    const col = columns.find((x) => x.key === sortKey) || columns[0];
     let va = col.value(a), vb = col.value(b);
-    if (sortKey === "status") {
+    if (dataView === "records" && sortKey === "status") {
       va = STATUS_ORDER[va.type] * 10 + LEVEL_ORDER[va.level];
       vb = STATUS_ORDER[vb.type] * 10 + LEVEL_ORDER[vb.level];
     }
-    if (va === null) return 1;
-    if (vb === null) return -1;
+    if (va === null || va === undefined) return 1;
+    if (vb === null || vb === undefined) return -1;
     if (va < vb) return -sortDir;
     if (va > vb) return sortDir;
     return 0;
   });
-  const head = COLUMNS.map(
+  const head = columns.map(
     (col) => `<th data-key="${col.key}" class="${col.key === sortKey ? "sorted" : ""}">${col.label}${col.key === sortKey ? (sortDir > 0 ? " ▲" : " ▼") : ""}</th>`
   ).join("");
   const body = rows.map((st) => {
     const info = statusInfo(st);
-    const cells = COLUMNS.map((col) => {
+    const cells = columns.map((col) => {
       if (col.key === "status") return `<td>${badgeHtml(info)}</td>`;
       const v = col.value(st);
       const txt = col.fmt ? col.fmt(v) : esc(v ?? "–");
@@ -541,7 +666,11 @@ function renderTable() {
     return `<tr data-id="${st.id}">${cells}</tr>`;
   }).join("");
   const empty = rows.length === 0
-    ? `<tr><td colspan="${COLUMNS.length}" class="empty">Keine Stationen mit Rekord${timelineOffset === 0 ? " (bisher heute)" : ""} — Filter „nur Rekorde" abwählen, um alle zu sehen.</td></tr>`
+    ? `<tr><td colspan="${columns.length}" class="empty">${
+      dataView === "now"
+        ? "Keine Stationen mit aktueller Messung — Filter „ohne Messung“ aktivieren."
+        : `Keine Stationen mit Rekord${timelineOffset === 0 ? " (bisher heute)" : ""} — Filter „nur Rekorde" abwählen, um alle zu sehen.`
+    }</td></tr>`
     : "";
   document.getElementById("stations-table").innerHTML = `<thead><tr>${head}</tr></thead><tbody>${body}${empty}</tbody>`;
 }
@@ -554,16 +683,20 @@ function showPanel(st) {
 
   function recordTable(title, recs, status) {
     const rows = [
-      ["day", "heutiger Kalendertag"],
+      ["day", isSimpleMode() ? "Kalendertag" : "heutiger Kalendertag"],
       ["quinzaine", "Halbmonat"],
       ["month", "laufender Monat"],
       ["alltime", "Allzeit"],
-    ].filter(([lvl]) => recs[lvl])
+    ].filter(([lvl]) => !isSimpleMode() || lvl !== "quinzaine")
+      .filter(([lvl]) => recs[lvl])
       .map(([lvl, label]) => {
         const r = recs[lvl];
         let mark = "";
-        if (status.level === lvl) mark = `<span style="color:${c[lvl]}">●</span> `;
-        else if (status.near === lvl) mark = `<span style="color:${c[lvl]}">○</span> `;
+        const displayLvl = displayLevel(lvl);
+        const statusLvl = displayLevel(status.level);
+        const statusNear = displayLevel(status.near);
+        if (statusLvl === displayLvl) mark = `<span style="color:${c[displayLvl]}">●</span> `;
+        else if (statusNear === displayLvl) mark = `<span style="color:${c[displayLvl]}">○</span> `;
         return `<tr><td>${mark}${label}</td><td class="val">${MODES[mode].fmt(r.value)}</td><td class="date">${fmtDate(r.date)}</td></tr>`;
       })
       .join("");
@@ -575,24 +708,55 @@ function showPanel(st) {
       + recordTable("Tiefdruckrekorde", st.params.plow.records, st.params.plow.status)
     : recordTable(MODES[mode].noun, stRecords(st), stStatus(st));
 
-  const todayVals = mode === "heat" || mode === "cold"
-    ? `<span class="hot">▲ ${fmtTemp(st.tmax_today)}</span>
+  const todayVals = dataView === "now"
+    ? `<span>${MODES[mode].icon} ${MODES[mode].fmt(nowValue(st))}</span>`
+    : mode === "heat" || mode === "cold"
+      ? `<span class="hot">▲ ${fmtTemp(st.tmax_today)}</span>
        <span class="cold">▼ ${fmtTemp(st.tmin_today)}</span>`
-    : `<span>${MODES[mode].icon} ${MODES[mode].fmt(stToday(st))}</span>`;
+      : `<span>${MODES[mode].icon} ${MODES[mode].fmt(stToday(st))}</span>`;
+  const years = historyYears(st);
+  const yearSpan = st.last_year
+    ? `Daten ${st.first_year}–${st.last_year}${years ? ` (${years} J.)` : ""}`
+    : `Daten seit ${st.first_year}`;
+  const nowRows = [
+    ["Temperatur", fmtTemp(st.now?.tt)],
+    ["Böe", fmtGust(st.now?.fx)],
+    ["Niederschlag (10 min)", fmtRain(st.now?.rr)],
+    ["Luftdruck", fmtPress(st.now?.pp)],
+  ].map(([label, value]) => `<tr><td>${label}</td><td class="val">${value}</td><td></td></tr>`).join("");
+  const content = dataView === "now"
+    ? `<table><tr><th>aktuelle Messung</th><th></th><th>${st.now?.ts ? st.now.ts.slice(11, 16) : ""}</th></tr>${nowRows}</table>`
+    : tables;
+  const comparison = isSimpleMode() && dataView === "records" ? simpleComparison(st, info) : "";
+  const label = dataView === "now" ? "letzte Messung" : MODES[mode].todayLabel;
   document.getElementById("panel-content").innerHTML = `
     <h2>${esc(st.name)}</h2>
-    <div class="meta">${esc(st.bundesland)} · ${st.altitude} m · Daten seit ${st.first_year}</div>
-    ${badgeHtml(info)}
+    <div class="meta">${esc(st.bundesland)} · ${st.altitude} m · ${yearSpan}</div>
+    ${dataView === "records" ? badgeHtml(info) : ""}
     <div class="today-vals">${todayVals}</div>
-    <div class="meta">${MODES[mode].todayLabel}${st.last_measurement ? ", letzte Messung " + st.last_measurement.slice(11, 16) + " Uhr" : ""}</div>
-    ${tables}`;
+    <div class="meta">${label}${st.last_measurement ? ", " + st.last_measurement.slice(11, 16) + " Uhr" : ""}</div>
+    ${comparison}
+    ${content}`;
   document.getElementById("panel").classList.remove("hidden");
 }
 
 function renderLegend() {
   const c = levelColors();
-  const levels = ["alltime", "month", "quinzaine", "day"]
-    .map((k) => `<span><i style="background:${c[k]}"></i>${LEVEL_LABEL_LONG[k]}</span>`)
+  if (dataView === "now") {
+    const stops = MODES[mode].scale;
+    const lo = stops[0][0];
+    const hi = stops[stops.length - 1][0];
+    const grad = stops
+      .map(([v, r, g, b, a]) => `rgba(${r},${g},${b},${Math.max(a / 255, 0.75)}) ${(((v - lo) / (hi - lo)) * 100).toFixed(1)}%`)
+      .join(", ");
+    document.getElementById("legend").innerHTML =
+      `<span><i style="background:${NODATA_COLOR}"></i>keine aktuelle Messung</span>` +
+      `<span class="sep">|</span><span class="scalebar">${MODES[mode].short(lo)}` +
+      `<i style="background:linear-gradient(90deg, ${grad})"></i>${MODES[mode].short(hi)}</span>`;
+    return;
+  }
+  const levels = (isSimpleMode() ? SIMPLE_LEVELS : ["alltime", "month", "quinzaine", "day"])
+    .map((k) => `<span><i style="background:${c[k]}"></i>${levelLongLabel(k)}</span>`)
     .join("");
   let scalebar = "";
   if (overlayEnabled && view === "map") {
@@ -608,22 +772,96 @@ function renderLegend() {
   }
   document.getElementById("legend").innerHTML =
     `${levels}<span class="sep">|</span>` +
-    `<span><i style="background:${c.day}"></i>gefüllt = gebrochen</span>` +
-    `<span><i class="ring" style="border-color:${c.day}"></i>Ring = nah dran (${MODES[mode].nearText})</span>` +
+    `<span><i style="background:${c.day}"></i>${isSimpleMode() ? "gefüllt = Rekord" : "gefüllt = gebrochen"}</span>` +
+    `<span><i class="ring" style="border-color:${c.day}"></i>${isSimpleMode() ? "Ring = nah" : `Ring = nah dran (${MODES[mode].nearText})`}</span>` +
     `<span><i style="background:${NONE_COLOR}"></i>kein Rekord</span>` +
     `<span><i style="background:${NODATA_COLOR}"></i>keine Daten</span>` +
     scalebar;
 }
 
+function applyUiModeControls() {
+  document.body.classList.toggle("ui-simple", isSimpleMode());
+  document.body.classList.toggle("ui-advanced", !isSimpleMode());
+  document.body.classList.toggle("data-now", dataView === "now");
+  document.body.classList.toggle("data-records", dataView === "records");
+  setToggle(["ui-simple", "ui-advanced"], isSimpleMode() ? "ui-simple" : "ui-advanced");
+  const heatBtn = document.getElementById("mode-heat");
+  if (heatBtn) {
+    const label = heatBtn.querySelector(".mode-label");
+    if (label) label.textContent = dataView === "now" ? "Temp" : "Hitze";
+  }
+}
+
+function updateFilterVisibility() {
+  document.getElementById("filter-years-label").classList.toggle(
+    "hidden", dataView !== "records",
+  );
+  document.getElementById("filter-records-label").classList.toggle(
+    "hidden", dataView !== "records",
+  );
+  document.getElementById("filter-now-missing-label").classList.toggle(
+    "hidden", dataView !== "now",
+  );
+  document.getElementById("filter-records").checked = recordsOnly[view];
+  document.getElementById("filter-now-missing").checked = showNowMissing;
+}
+
+function filtersAreActive() {
+  const land = document.getElementById("filter-land").value;
+  const alt = document.getElementById("filter-alt").value;
+  const years = document.getElementById("filter-years").value;
+  const defaultYears = document.getElementById("filter-years").defaultValue
+    || document.getElementById("filter-years").getAttribute("value");
+  if (land) return true;
+  if (alt !== "") return true;
+  if (dataView === "records" && years !== "" && years !== defaultYears) return true;
+  if (dataView === "records" && recordsOnly[view]) return true;
+  if (dataView === "now" && showNowMissing) return true;
+  if (timelineOffset !== 0) return true;
+  return false;
+}
+
+function updateFilterChip() {
+  document.getElementById("filter-active-dot").classList.toggle("hidden", !filtersAreActive());
+}
+
+function setFilterPanelOpen(open) {
+  document.body.classList.toggle("filters-open", open);
+  const btn = document.getElementById("filter-toggle");
+  btn.setAttribute("aria-expanded", open ? "true" : "false");
+  btn.classList.toggle("active", open);
+  if (MOBILE_MQ.matches) {
+    sessionStorage.setItem("wetterrekordFiltersOpen", open ? "1" : "0");
+  }
+  setTimeout(() => map.invalidateSize(), 50);
+}
+
+function syncFilterPanelToViewport() {
+  // Desktop: panel always open. Mobile: restore session preference (default closed).
+  if (!MOBILE_MQ.matches) {
+    setFilterPanelOpen(true);
+    return;
+  }
+  const stored = sessionStorage.getItem("wetterrekordFiltersOpen");
+  setFilterPanelOpen(stored === "1");
+}
+
 function render() {
+  applyUiModeControls();
+  updateFilterVisibility();
+  updateFilterChip();
   document.getElementById("map").classList.toggle("hidden", view !== "map");
   document.getElementById("table-view").classList.toggle("hidden", view !== "table");
-  document.getElementById("filter-records").checked = recordsOnly[view];
   renderStats();
   renderLegend();
   if (view === "map") renderMap();
   else renderTable();
   renderOverlay();
+  if (selectedStationId !== null && !document.getElementById("panel").classList.contains("hidden")) {
+    const updated = stations.find((s) => s.id === selectedStationId);
+    if (updated && passesFilter(updated)) showPanel(updated);
+    else document.getElementById("panel").classList.add("hidden");
+  }
 }
 
 // ---- Zeitleiste ----
@@ -722,11 +960,44 @@ function setToggle(groupIds, activeId) {
   for (const id of groupIds) document.getElementById(id).classList.toggle("active", id === activeId);
 }
 const MODE_BUTTON_IDS = Object.keys(MODES).map((m) => "mode-" + m);
-for (const m of Object.keys(MODES)) {
-  document.getElementById("mode-" + m).addEventListener("click", () => {
-    mode = m; setToggle(MODE_BUTTON_IDS, "mode-" + m); render();
-  });
+function setMode(m) {
+  mode = m;
+  setToggle(MODE_BUTTON_IDS, "mode-" + m);
+  render();
 }
+function setDataView(next) {
+  dataView = next === "now" ? "now" : "records";
+  setToggle(["data-records", "data-now"], dataView === "now" ? "data-now" : "data-records");
+  if (dataView === "now" && isSimpleMode() && mode !== "heat") {
+    mode = "heat";
+    setToggle(MODE_BUTTON_IDS, "mode-heat");
+  }
+  if (dataView === "now" && sortKey === "status") sortKey = "now";
+  if (dataView === "records" && sortKey === "now") sortKey = "recordAge";
+  render();
+}
+function setUiMode(next) {
+  uiMode = next === "advanced" ? "advanced" : "simple";
+  localStorage.setItem("wetterrekordUiMode", uiMode);
+  if (isSimpleMode()) {
+    if (!SIMPLE_MODES.includes(mode)) {
+      mode = "heat";
+      setToggle(MODE_BUTTON_IDS, "mode-heat");
+    }
+    if (dataView === "now" && mode !== "heat") {
+      mode = "heat";
+      setToggle(MODE_BUTTON_IDS, "mode-heat");
+    }
+  }
+  render();
+}
+for (const m of Object.keys(MODES)) {
+  document.getElementById("mode-" + m).addEventListener("click", () => setMode(m));
+}
+document.getElementById("data-records").addEventListener("click", () => setDataView("records"));
+document.getElementById("data-now").addEventListener("click", () => setDataView("now"));
+document.getElementById("ui-simple").addEventListener("click", () => setUiMode("simple"));
+document.getElementById("ui-advanced").addEventListener("click", () => setUiMode("advanced"));
 document.getElementById("view-map").addEventListener("click", () => {
   view = "map"; setToggle(["view-map", "view-table"], "view-map"); render();
   map.invalidateSize();
@@ -734,12 +1005,21 @@ document.getElementById("view-map").addEventListener("click", () => {
 document.getElementById("view-table").addEventListener("click", () => {
   view = "table"; setToggle(["view-map", "view-table"], "view-table"); render();
 });
+document.getElementById("filter-toggle").addEventListener("click", () => {
+  setFilterPanelOpen(!document.body.classList.contains("filters-open"));
+});
 document.getElementById("filter-land").addEventListener("change", render);
 document.getElementById("filter-records").addEventListener("change", (ev) => {
   recordsOnly[view] = ev.target.checked;
   render();
 });
+document.getElementById("filter-now-missing").addEventListener("change", (ev) => {
+  showNowMissing = ev.target.checked;
+  render();
+});
 document.getElementById("filter-alt").addEventListener("input", render);
+document.getElementById("filter-years").addEventListener("input", render);
+MOBILE_MQ.addEventListener("change", syncFilterPanelToViewport);
 const overlayToggle = document.getElementById("overlay-toggle");
 overlayToggle.checked = overlayEnabled;
 overlayToggle.addEventListener("change", () => {
@@ -791,6 +1071,8 @@ const shareBtn = document.getElementById("timeline-share");
 shareBtn.addEventListener("click", async () => {
   const url = new URL(location.origin + location.pathname);
   if (mode !== "heat") url.searchParams.set("mode", mode);
+  if (dataView !== "records") url.searchParams.set("view", dataView);
+  if (uiMode !== "simple") url.searchParams.set("ui", uiMode);
   // immer den angezeigten Zeitpunkt mitgeben — auch "live" ist für den
   // Empfänger später ein historischer Moment; Unix-Sekunden statt ISO,
   // damit keine %-Encodings in der URL landen
@@ -811,13 +1093,24 @@ shareBtn.addEventListener("click", async () => {
   setTimeout(() => { shareBtn.textContent = "🔗 Teilen"; }, 1500);
 });
 
-// beim Start ?mode= und ?at= aus einem geteilten Link übernehmen
+// beim Start ?mode=, ?view=, ?ui= und ?at= aus einem geteilten Link übernehmen
 {
   const params = new URLSearchParams(location.search);
+  const ui = params.get("ui");
+  if (ui === "simple" || ui === "advanced") uiMode = ui;
   const m = params.get("mode");
   if (MODES[m]) {
     mode = m;
+    if (isSimpleMode() && !SIMPLE_MODES.includes(mode)) {
+      uiMode = "advanced";
+      localStorage.setItem("wetterrekordUiMode", uiMode);
+    }
     setToggle(MODE_BUTTON_IDS, "mode-" + m);
+  }
+  const dv = params.get("view");
+  if (dv === "now" || dv === "records") {
+    dataView = dv;
+    setToggle(["data-records", "data-now"], dataView === "now" ? "data-now" : "data-records");
   }
   const raw = params.get("at");
   // Unix-Sekunden (neue Links) oder ISO-String (alte Links)
@@ -830,6 +1123,8 @@ shareBtn.addEventListener("click", async () => {
     }
   }
 }
+applyUiModeControls();
+syncFilterPanelToViewport();
 
 // About-Sektion: nur beim ersten Besuch aufgeklappt; eingeklappt verschwindet
 // sie komplett und wird über den Footer-Link wieder geöffnet

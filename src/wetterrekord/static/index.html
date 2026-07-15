@@ -2,7 +2,7 @@
 <html lang="de">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Wetterrekorde Deutschland live: Temperatur-, Sturm- und Regenrekorde heute | wetterrekord.de</title>
 <meta name="description" content="Wetterrekorde in Deutschland live: Welche Wetterstation bricht heute ihren Temperaturrekord? Hitzerekorde, Kälterekorde, Sturm-, Regen- und Luftdruckrekorde (Tag, Monat, Allzeit) von über 330 DWD-Stationen auf einer Live-Karte — alle 15 Minuten aktualisiert.">
 <link rel="canonical" href="{{BASE_URL}}/">
@@ -36,39 +36,56 @@
 </head>
 <body>
 <header>
-  <h1>wetter<span class="accent">rekord</span>.de <span class="claim">— Wetterrekorde Deutschland live</span></h1>
+  <div class="topbar">
+    <h1>wetter<span class="accent">rekord</span>.de <span class="claim">— Wetterrekorde Deutschland live</span></h1>
+    <div class="mode-toggle ui-mode-toggle" title="Ansicht">
+      <button id="ui-simple" class="active">Simple</button>
+      <button id="ui-advanced">Advanced</button>
+    </div>
+  </div>
   <div id="stats" class="stats"></div>
-  <div class="controls">
+  <div class="controls primary-controls">
     <div class="mode-toggle">
-      <button id="mode-heat" class="active">🔥 Hitze</button>
-      <button id="mode-cold">❄️ Kälte</button>
-      <button id="mode-gust">💨 Böen</button>
-      <button id="mode-precip">🌧️ Regen</button>
-      <button id="mode-press" title="Luftdruck-Tagesmittel auf Meereshöhe, Hoch- und Tiefdruckrekorde">🌀 Druck</button>
+      <button id="data-records" class="active">Rekorde</button>
+      <button id="data-now">Jetzt</button>
+    </div>
+    <div class="mode-toggle param-modes">
+      <button id="mode-heat" class="active" title="Hitze">🔥 <span class="mode-label">Hitze</span></button>
+      <button id="mode-cold" title="Kälte">❄️ <span class="mode-label">Kälte</span></button>
+      <button id="mode-gust" class="advanced-only" title="Böen">💨 <span class="mode-label">Böen</span></button>
+      <button id="mode-precip" class="advanced-only" title="Regen">🌧️ <span class="mode-label">Regen</span></button>
+      <button id="mode-press" class="advanced-only" title="Luftdruck-Tagesmittel auf Meereshöhe, Hoch- und Tiefdruckrekorde">🌀 <span class="mode-label">Druck</span></button>
     </div>
     <div class="mode-toggle">
       <button id="view-map" class="active">Karte</button>
       <button id="view-table">Tabelle</button>
     </div>
+    <button type="button" id="filter-toggle" class="filter-chip" aria-expanded="false" aria-controls="filter-panel">
+      Filter <span id="filter-active-dot" class="filter-dot hidden" title="Filter aktiv"></span>
+    </button>
   </div>
-  <div class="controls">
-    <select id="filter-land"><option value="">Alle Bundesländer</option></select>
-    <label>Höhe ≤ <input type="number" id="filter-alt" placeholder="∞" min="0" step="100"> m</label>
-    <label class="switch" id="filter-records-label"><input type="checkbox" id="filter-records"><span class="knob"></span> nur Rekorde</label>
-    <label class="switch" id="overlay-label" title="interpolierte Messwert-Farbfläche über Deutschland"><input type="checkbox" id="overlay-toggle"><span class="knob"></span> Farbfläche</label>
-    <span class="timeline" title="Zeitpunkt der Anzeige wählen (bis zu 30 Tage zurück, soweit Daten vorliegen)">
-      <span class="tl-caption">🕐 Rückblick</span>
-      <span class="tl-end" id="timeline-min-label">−48&thinsp;h</span>
-      <input type="range" id="timeline" min="-96" max="0" value="0" step="1" autocomplete="off" list="timeline-ticks">
-      <datalist id="timeline-ticks">
-        <option value="-96"></option><option value="-48"></option><option value="0"></option>
-      </datalist>
-      <span id="timeline-label">jetzt</span>
-      <button id="timeline-now" disabled>⏵ zurück zu live</button>
-      <button id="timeline-share" title="Link zu diesem Zeitpunkt teilen bzw. kopieren">🔗 Teilen</button>
-    </span>
+  <div id="filter-panel" class="filter-panel">
+    <div class="controls filter-controls">
+      <select id="filter-land"><option value="">Alle Bundesländer</option></select>
+      <label id="filter-alt-label">Höhe ≤ <input type="number" id="filter-alt" placeholder="∞" min="0" step="100"> m</label>
+      <label id="filter-years-label">Historie ≥ <input type="number" id="filter-years" value="{{MIN_YEARS}}" min="0" step="1"> J.</label>
+      <label class="switch" id="filter-records-label"><input type="checkbox" id="filter-records"><span class="knob"></span> nur Rekorde</label>
+      <label class="switch hidden" id="filter-now-missing-label"><input type="checkbox" id="filter-now-missing"><span class="knob"></span> ohne Messung</label>
+      <label class="switch" id="overlay-label" title="interpolierte Messwert-Farbfläche über Deutschland"><input type="checkbox" id="overlay-toggle"><span class="knob"></span> Farbfläche</label>
+      <span class="timeline" title="Zeitpunkt der Anzeige wählen (bis zu 30 Tage zurück, soweit Daten vorliegen)">
+        <span class="tl-caption">🕐 Rückblick</span>
+        <span class="tl-end" id="timeline-min-label">−48&thinsp;h</span>
+        <input type="range" id="timeline" min="-96" max="0" value="0" step="1" autocomplete="off" list="timeline-ticks">
+        <datalist id="timeline-ticks">
+          <option value="-96"></option><option value="-48"></option><option value="0"></option>
+        </datalist>
+        <span id="timeline-label">jetzt</span>
+        <button id="timeline-now" disabled>⏵ zurück zu live</button>
+        <button id="timeline-share" title="Link zu diesem Zeitpunkt teilen bzw. kopieren">🔗 Teilen</button>
+      </span>
+    </div>
+    <div class="legend" id="legend"></div>
   </div>
-  <div class="legend" id="legend"></div>
 </header>
 <div id="ingest-overlay" class="hidden">
   <div>
@@ -100,6 +117,10 @@
   Niederschlags, läuft über den Tag auf) und <strong>Luftdruckrekorde</strong>
   (höchster/tiefster Tagesmittelwert, auf Meereshöhe reduziert — beim Luftdruck
   ist der Vergleich erst gegen Tagesende belastbar).</p>
+  <p>Die Ansicht <strong>Jetzt</strong> zeigt den jeweils letzten 10-Minuten-Messwert
+  pro Station — unabhängig vom Rekordvergleich. Unter <strong>Simple</strong> bleiben
+  Hitze und Kälte im Fokus; <strong>Advanced</strong> schaltet alle Parameter und
+  Filter frei.</p>
   <p>Berücksichtigt werden nur Stationen mit mindestens 30 Jahren Messhistorie
   im jeweiligen Messwert — nicht jede Station misst Wind, Niederschlag und Luftdruck. Die
   Live-Werte stammen aus den 10-Minuten-Daten des DWD (etwa 30 Minuten Verzögerung) und

@@ -8,6 +8,7 @@ import time
 from contextlib import asynccontextmanager
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 from zoneinfo import ZoneInfo
 
 from apscheduler.schedulers.background import BackgroundScheduler
@@ -198,6 +199,27 @@ def past_values(db_conn: sqlite3.Connection, at: datetime) -> dict[str, tuple]:
     }
 
 
+def latest_measurements(db_conn: sqlite3.Connection, at: datetime) -> dict[str, dict]:
+    """Latest stored measurement row per station on `at`'s local calendar day."""
+    day_start = at.replace(hour=0, minute=0, second=0, microsecond=0)
+    return {
+        r["station_id"]: {
+            "ts": r["ts"],
+            "tt": r["tt"],
+            "fx": r["fx"],
+            "rr": r["rr"],
+            "pp": r["pp"],
+        }
+        for r in db_conn.execute(
+            "SELECT m.* FROM measurements m "
+            "JOIN (SELECT station_id, MAX(ts) ts FROM measurements"
+            " WHERE ts >= ? AND ts <= ? GROUP BY station_id) latest "
+            "ON latest.station_id = m.station_id AND latest.ts = m.ts",
+            (day_start.isoformat(), at.isoformat()),
+        )
+    }
+
+
 @app.get("/api/stations")
 def api_stations(at: str | None = None):
     c = request_conn()
@@ -216,6 +238,7 @@ def api_stations(at: str | None = None):
         if at_dt > now_local:
             raise HTTPException(status_code=400, detail="'at' must not be in the future")
         values = past_values(c, at_dt)
+        latest = latest_measurements(c, at_dt)
         target_date = at_dt.date()
         generated_at = at_dt
     else:
@@ -234,6 +257,7 @@ def api_stations(at: str | None = None):
                 "SELECT * FROM live_state WHERE date = ?", (target_date.isoformat(),)
             )
         }
+        latest = latest_measurements(c, now_local)
 
     month, day = target_date.month, target_date.day
     half = 1 if day <= 15 else 2
@@ -292,9 +316,12 @@ def api_stations(at: str | None = None):
                 "lon": s["lon"],
                 "altitude": s["altitude"],
                 "first_year": s["first_year"],
+                "last_year": s["last_year"],
+                "history_years": s["last_year"] - s["first_year"] + 1,
                 "tmax_today": tmax_today,
                 "tmin_today": tmin_today,
                 "last_measurement": last_measurement,
+                "now": latest.get(sid),
                 "records": {"high": high, "low": low},
                 "heat": _status(tmax_today, high, "heat"),
                 "cold": _status(tmin_today, low, "cold"),
@@ -401,6 +428,7 @@ def index():
         html.replace("{{BASE_URL}}", config.BASE_URL)
         .replace("{{IMPRINT_LINK}}", imprint_link)
         .replace("{{VERSION}}", VERSION)
+        .replace("{{MIN_YEARS}}", str(config.MIN_YEARS))
     )
     # no-cache (= revalidate, not "don't store"): the asset URLs carry the
     # version, so a fresh index is all it takes for deploys to reach browsers
@@ -475,6 +503,149 @@ def sitemap_xml():
         "</urlset>\n"
     )
     return Response(content=xml, media_type="application/xml")
+
+
+_STATUS_TABLES = (
+    "stations",
+    "daily_records",
+    "quinzaine_records",
+    "monthly_records",
+    "alltime_records",
+    "measurements",
+    "live_state",
+)
+
+
+def _format_bytes(size: int) -> str:
+    units = ("B", "KB", "MB", "GB")
+    value = float(size)
+    for unit in units:
+        if value < 1024 or unit == units[-1]:
+            return f"{value:.1f} {unit}" if unit != "B" else f"{int(value)} B"
+        value /= 1024
+    return f"{size} B"
+
+
+def _status_payload() -> dict[str, Any]:
+    c = request_conn()
+    db_path = config.DB_PATH
+    tables = {
+        name: c.execute(f"SELECT count(*) FROM {name}").fetchone()[0] for name in _STATUS_TABLES
+    }
+    meas = c.execute(
+        "SELECT MIN(ts) oldest, MAX(ts) newest, count(*) n FROM measurements"
+    ).fetchone()
+    live_row = c.execute(
+        "SELECT count(*) n, MAX(last_measurement_at) latest FROM live_state"
+    ).fetchone()
+    params = {
+        r["param"]: r["n"]
+        for r in c.execute(
+            "SELECT param, count(*) n FROM alltime_records GROUP BY param ORDER BY param"
+        )
+    }
+    sqlite_files = []
+    if db_path.parent.exists():
+        for path in sorted(db_path.parent.glob(db_path.name + "*")):
+            sqlite_files.append(
+                {
+                    "name": path.name,
+                    "size": path.stat().st_size,
+                    "size_human": _format_bytes(path.stat().st_size),
+                }
+            )
+    cache_size = 0
+    cache_files = 0
+    if config.CACHE_DIR.exists():
+        for p in config.CACHE_DIR.rglob("*"):
+            if p.is_file():
+                cache_files += 1
+                cache_size += p.stat().st_size
+    return {
+        "version": VERSION,
+        "ingest_running": ingest_running,
+        "tables": tables,
+        "alltime_by_param": params,
+        "measurements": {
+            "count": meas["n"],
+            "oldest": meas["oldest"],
+            "newest": meas["newest"],
+        },
+        "live_state": {"count": live_row["n"], "latest": live_row["latest"]},
+        "sqlite_files": sqlite_files,
+        "cache": {
+            "files": cache_files,
+            "size": cache_size,
+            "size_human": _format_bytes(cache_size),
+        },
+        "config": {
+            "min_years": config.MIN_YEARS,
+            "live_poll_minutes": config.LIVE_POLL_MINUTES,
+            "ingest_hour": config.INGEST_HOUR,
+            "local_tz": config.LOCAL_TZ,
+        },
+    }
+
+
+@app.get("/_status.json")
+def status_json():
+    """Operational status for monitoring. Put access control in the reverse proxy."""
+    return _status_payload()
+
+
+@app.get("/_status", response_class=HTMLResponse)
+def status_page():
+    """Unlinked operational status page. Protect via reverse proxy if needed."""
+    data = _status_payload()
+    rows = "".join(
+        f"<tr><th>{key}</th><td>{value}</td></tr>"
+        for key, value in (
+            ("Version", data["version"]),
+            ("Ingest läuft", data["ingest_running"]),
+            ("Messungen", data["measurements"]["count"]),
+            ("Messungen von", data["measurements"]["oldest"] or "—"),
+            ("Messungen bis", data["measurements"]["newest"] or "—"),
+            ("Live-Stationen", data["live_state"]["count"]),
+            ("Letzte Messung", data["live_state"]["latest"] or "—"),
+            ("Cache", f"{data['cache']['files']} Dateien · {data['cache']['size_human']}"),
+            (
+                "SQLite",
+                ", ".join(f"{f['name']} ({f['size_human']})" for f in data["sqlite_files"])
+                or "—",
+            ),
+        )
+    )
+    table_rows = "".join(
+        f"<tr><th>{name}</th><td>{count}</td></tr>" for name, count in data["tables"].items()
+    )
+    param_rows = "".join(
+        f"<tr><th>{param}</th><td>{count}</td></tr>"
+        for param, count in data["alltime_by_param"].items()
+    )
+    return HTMLResponse(
+        f"""<!DOCTYPE html>
+<html lang="de"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Status | wetterrekord.de</title>
+<style>
+body {{ background:#14181f; color:#e8e8e8; font-family:-apple-system,"Segoe UI",Roboto,sans-serif;
+  max-width:48rem; margin:0 auto; padding:24px 16px; line-height:1.5; }}
+h1 {{ font-size:1.3rem; }} h2 {{ font-size:1.05rem; margin-top:1.6em; color:#9aa4b5; }}
+table {{ border-collapse:collapse; width:100%; font-size:0.9rem; }}
+th, td {{ text-align:left; padding:6px 8px; border-bottom:1px solid #2a3140; }}
+th {{ color:#9aa4b5; font-weight:500; width:40%; }}
+a {{ color:#8ab4f8; }}
+</style></head><body>
+<p><a href="./">&larr; zurück zur Karte</a> · <a href="/_status.json">JSON</a></p>
+<h1>Betriebsstatus</h1>
+<table>{rows}</table>
+<h2>Tabellen</h2>
+<table>{table_rows}</table>
+<h2>Allzeit-Rekorde nach Parameter</h2>
+<table>{param_rows or "<tr><td colspan=2>—</td></tr>"}</table>
+</body></html>"""
+    )
 
 
 app.mount("/", StaticFiles(directory=STATIC_DIR, html=True), name="static")

@@ -64,7 +64,9 @@ uv run wetterrekord                    # web server on port 8000
 - `records.py` / `ingest.py` — record computation and import into SQLite (`data/wetterrekord.sqlite`)
 - `live.py` — poller for today's max/min values (`10_minutes/air_temperature/now`, ~30 min latency)
 - `app.py` — FastAPI: `/api/stations` (map), `/api/stations/{id}` (details), static frontend
-- `static/` — Leaflet map (CARTO dark tiles), heat/cold toggle, filters by federal state and altitude
+- `static/` — Leaflet map, heat/cold/gust/precip/pressure, **Rekorde|Jetzt**,
+  Simple/Advanced, filters (state, altitude, history years), collapsible mobile chrome
+- `/_status` / `/_status.json` — operational status (protect via reverse proxy if public)
 
 ## Data license
 
