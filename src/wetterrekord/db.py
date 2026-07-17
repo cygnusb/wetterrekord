@@ -150,10 +150,29 @@ def _migrate_pressure_to_sea_level(conn: sqlite3.Connection) -> None:
         conn.execute("PRAGMA user_version = 3")
 
 
+def needs_ingest(conn: sqlite3.Connection) -> bool:
+    """True on a fresh database — or after a schema upgrade added still-empty
+    records (v0.2: quinzaine table, v0.7: non-temperature parameters) or when
+    the pressure records are still station-level (v0.10: sea-level reduction;
+    mountain stations then have all-time values far below 900 hPa)."""
+    return (
+        conn.execute("SELECT count(*) FROM stations").fetchone()[0] == 0
+        or conn.execute("SELECT count(*) FROM quinzaine_records").fetchone()[0] == 0
+        or conn.execute(
+            "SELECT count(*) FROM quinzaine_records WHERE param != 'temp'"
+        ).fetchone()[0]
+        == 0
+        or conn.execute(
+            "SELECT count(*) FROM alltime_records WHERE param = 'pressure' AND value < 900"
+        ).fetchone()[0]
+        > 0
+    )
+
+
 def connect(path: Path | None = None) -> sqlite3.Connection:
     target = path or config.DB_PATH
     target.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(target, check_same_thread=False)
+    conn = sqlite3.connect(target, check_same_thread=False, timeout=30)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
     _migrate(conn)

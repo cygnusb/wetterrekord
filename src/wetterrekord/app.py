@@ -16,7 +16,7 @@ from fastapi import FastAPI, HTTPException, Response
 from fastapi.responses import HTMLResponse, PlainTextResponse
 from fastapi.staticfiles import StaticFiles
 
-from . import config, db, ingest, live, ogimage
+from . import config, db, live, ogimage
 
 log = logging.getLogger(__name__)
 
@@ -39,20 +39,20 @@ def request_conn() -> sqlite3.Connection:
     if not hasattr(_request_conns, "conn"):
         _request_conns.conn = db.connect()
     return _request_conns.conn
-# True while the (re-)ingest of the DWD history runs; the frontend blocks
-# with a notice because records are inconsistent during the rebuild.
-ingest_running = False
+# The (re-)ingest of the DWD history runs in a separate container
+# (python -m wetterrekord.ingest --daemon) and signals via a marker file on
+# the shared data volume; the frontend blocks with a notice because records
+# are inconsistent during the rebuild. Markers older than this are leftovers
+# from a crashed ingest and are ignored.
+INGEST_MARKER_MAX_AGE = 3 * 3600
 
 
-def refresh_records() -> None:
-    """Recompute the records from the DWD history, then poll immediately."""
-    global ingest_running
-    ingest_running = True
+def ingest_running() -> bool:
     try:
-        ingest.ingest()
-    finally:
-        ingest_running = False
-    live.poll_all(conn)
+        age = time.time() - config.INGEST_MARKER.stat().st_mtime
+    except OSError:
+        return False
+    return age < INGEST_MARKER_MAX_AGE
 
 
 @asynccontextmanager
@@ -65,30 +65,7 @@ async def lifespan(app: FastAPI):
     # datetimes in the scheduler timezone — in a UTC container the job is
     # then considered misfired and gets discarded.
     now = datetime.now(ZoneInfo(config.LOCAL_TZ))
-    # Also re-ingest when a schema upgrade added still-empty records
-    # (v0.2: quinzaine table, v0.7: non-temperature parameters) or when the
-    # pressure records are still station-level (v0.10: sea-level reduction;
-    # mountain stations then have all-time values far below 900 hPa).
-    db_empty = (
-        conn.execute("SELECT count(*) FROM stations").fetchone()[0] == 0
-        or conn.execute("SELECT count(*) FROM quinzaine_records").fetchone()[0] == 0
-        or conn.execute(
-            "SELECT count(*) FROM quinzaine_records WHERE param != 'temp'"
-        ).fetchone()[0]
-        == 0
-        or conn.execute(
-            "SELECT count(*) FROM alltime_records WHERE param = 'pressure' AND value < 900"
-        ).fetchone()[0]
-        > 0
-    )
-    if db_empty:
-        # First start (e.g. fresh container): load the history in the
-        # background; the server is reachable immediately and fills up once
-        # the import is done.
-        log.info("database empty — starting initial ingest in the background")
-        scheduler.add_job(refresh_records, next_run_time=now, misfire_grace_time=None)
-    else:
-        scheduler.add_job(live.poll_all, args=[conn], next_run_time=now, misfire_grace_time=None)
+    scheduler.add_job(live.poll_all, args=[conn], next_run_time=now, misfire_grace_time=None)
     scheduler.add_job(
         live.poll_all,
         "interval",
@@ -97,10 +74,6 @@ async def lifespan(app: FastAPI):
         max_instances=1,
         coalesce=True,
         misfire_grace_time=None,
-    )
-    # Daily is enough: the DWD updates the daily/kl recent data only once per day.
-    scheduler.add_job(
-        refresh_records, "cron", hour=config.INGEST_HOUR, minute=30, misfire_grace_time=None
     )
     scheduler.start()
     yield
@@ -338,7 +311,7 @@ def api_stations(at: str | None = None):
         "generated_at": generated_at.isoformat(),
         # oldest stored measurement — the frontend limits the timeline to this
         "history_start": c.execute("SELECT MIN(ts) FROM measurements").fetchone()[0],
-        "ingest_running": ingest_running,
+        "ingest_running": ingest_running(),
         "stations": stations,
     }
 
@@ -563,7 +536,7 @@ def _status_payload() -> dict[str, Any]:
                 cache_size += p.stat().st_size
     return {
         "version": VERSION,
-        "ingest_running": ingest_running,
+        "ingest_running": ingest_running(),
         "tables": tables,
         "alltime_by_param": params,
         "measurements": {

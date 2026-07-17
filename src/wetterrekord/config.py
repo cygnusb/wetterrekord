@@ -5,6 +5,9 @@ BASE_DIR = Path(__file__).resolve().parent.parent.parent
 DATA_DIR = Path(os.environ.get("WETTERREKORD_DATA_DIR", BASE_DIR / "data"))
 CACHE_DIR = DATA_DIR / "cache"
 DB_PATH = DATA_DIR / "wetterrekord.sqlite"
+# Exists while the ingest (separate container) rebuilds the records; the app
+# reads it to show the rebuild notice. Shared via the data volume.
+INGEST_MARKER = DATA_DIR / "ingest.running"
 
 DWD_BASE = "https://opendata.dwd.de/climate_environment/CDC/observations_germany/climate"
 DAILY_KL_HISTORICAL = f"{DWD_BASE}/daily/kl/historical/"

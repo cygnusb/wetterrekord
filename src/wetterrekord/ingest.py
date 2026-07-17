@@ -1,13 +1,18 @@
-"""Initial import: select stations, download history, write records to the DB.
+"""Import: select stations, download history, write records to the DB.
 
-Usage: python -m wetterrekord.ingest [--limit N]
+Usage: python -m wetterrekord.ingest [--limit N] [--daemon]
+
+--daemon runs forever (separate container): an immediate ingest when the
+database is empty, then one run per day at INGEST_HOUR:30 local time.
 """
 
 import argparse
 import logging
 import sqlite3
+import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
+from zoneinfo import ZoneInfo
 
 from . import config, db
 from .dwd import DwdClient, StationInfo
@@ -74,42 +79,89 @@ def store_station(
 def ingest(limit: int | None = None) -> None:
     client = DwdClient()
     conn = db.connect()
-    stations = select_stations(client)
-    if limit:
-        stations = stations[:limit]
-    log.info("%d stations selected", len(stations))
+    # marker on the shared volume: the app blocks the frontend with a notice
+    # while the rebuild runs, because records are inconsistent in between
+    config.INGEST_MARKER.write_text(datetime.now(ZoneInfo(config.LOCAL_TZ)).isoformat())
+    try:
+        stations = select_stations(client)
+        if limit:
+            stations = stations[:limit]
+        log.info("%d stations selected", len(stations))
 
-    def process(station: StationInfo) -> tuple[StationInfo, StationRecords]:
-        return station, compute_records(client.daily_values(station.id), station.altitude)
+        def process(station: StationInfo) -> tuple[StationInfo, StationRecords]:
+            return station, compute_records(client.daily_values(station.id), station.altitude)
 
-    done = failed = 0
-    with ThreadPoolExecutor(max_workers=config.DOWNLOAD_CONCURRENCY) as pool:
-        futures = [pool.submit(process, s) for s in stations]
-        for future in as_completed(futures):
-            try:
-                station, records = future.result()
-            except Exception:
-                failed += 1
-                log.exception("station failed")
-                continue
-            if records.first_year is None:
-                failed += 1
-                continue
-            store_station(conn, station, records)
-            done += 1
-            if done % 25 == 0:
-                log.info("%d/%d stations imported", done, len(stations))
-    log.info("done: %d imported, %d failed", done, failed)
-    client.close()
+        done = failed = 0
+        with ThreadPoolExecutor(max_workers=config.DOWNLOAD_CONCURRENCY) as pool:
+            futures = [pool.submit(process, s) for s in stations]
+            for future in as_completed(futures):
+                try:
+                    station, records = future.result()
+                except Exception:
+                    failed += 1
+                    log.exception("station failed")
+                    continue
+                if records.first_year is None:
+                    failed += 1
+                    continue
+                store_station(conn, station, records)
+                done += 1
+                if done % 25 == 0:
+                    log.info("%d/%d stations imported", done, len(stations))
+        log.info("done: %d imported, %d failed", done, failed)
+    finally:
+        config.INGEST_MARKER.unlink(missing_ok=True)
+        client.close()
+        conn.close()
+
+
+def next_run(now: datetime) -> datetime:
+    """Next INGEST_HOUR:30 local time strictly after `now`."""
+    run = now.replace(hour=config.INGEST_HOUR, minute=30, second=0, microsecond=0)
+    if run <= now:
+        run += timedelta(days=1)
+    return run
+
+
+def daemon() -> None:
+    """Ingest on a fresh database, then daily at INGEST_HOUR:30.
+
+    Failures are logged and the loop continues — the DWD being unreachable
+    tonight must not crash-loop the container.
+    """
+    conn = db.connect()
+    initial = db.needs_ingest(conn)
     conn.close()
+    if initial:
+        log.info("database empty — running initial ingest")
+        try:
+            ingest()
+        except Exception:
+            log.exception("initial ingest failed")
+    tz = ZoneInfo(config.LOCAL_TZ)
+    while True:
+        now = datetime.now(tz)
+        run_at = next_run(now)
+        log.info("next ingest at %s", run_at.isoformat())
+        time.sleep(max(0.0, (run_at - now).total_seconds()))
+        try:
+            ingest()
+        except Exception:
+            log.exception("ingest failed")
 
 
 def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     parser = argparse.ArgumentParser(description="Import DWD history and compute records")
     parser.add_argument("--limit", type=int, help="only the first N stations (for testing)")
+    parser.add_argument(
+        "--daemon", action="store_true", help="run forever, one ingest per day"
+    )
     args = parser.parse_args()
-    ingest(limit=args.limit)
+    if args.daemon:
+        daemon()
+    else:
+        ingest(limit=args.limit)
 
 
 if __name__ == "__main__":

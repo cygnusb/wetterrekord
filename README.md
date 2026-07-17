@@ -58,6 +58,13 @@ uv run python -m wetterrekord.ingest   # once: download history, compute records
 uv run wetterrekord                    # web server on port 8000
 ```
 
+The web server only serves and live-polls; the daily record recomputation is a
+separate process (own container in production, sharing the data volume):
+
+```sh
+uv run python -m wetterrekord.ingest --daemon   # ingest daily at INGEST_HOUR:30
+```
+
 ## Architecture
 
 - `dwd.py` — download + parsing of the DWD files (station lists, daily values `daily/kl`, 10-minute values)
