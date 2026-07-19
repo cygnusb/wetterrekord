@@ -173,24 +173,29 @@ def past_values(db_conn: sqlite3.Connection, at: datetime) -> dict[str, tuple]:
 
 
 def latest_measurements(db_conn: sqlite3.Connection, at: datetime) -> dict[str, dict]:
-    """Latest stored measurement row per station on `at`'s local calendar day."""
+    """Latest stored values per station and parameter on `at`'s local day.
+
+    Each parameter is taken from its own newest non-null row: the DWD
+    now-products publish with different latency, so the newest merged row
+    often carries only rain/gust while temperature still ends 10 min
+    earlier. `ts` is the newest of the contributing timestamps.
+    """
     day_start = at.replace(hour=0, minute=0, second=0, microsecond=0)
-    return {
-        r["station_id"]: {
-            "ts": r["ts"],
-            "tt": r["tt"],
-            "fx": r["fx"],
-            "rr": r["rr"],
-            "pp": r["pp"],
-        }
+    result: dict[str, dict] = {}
+    for col in ("tt", "fx", "rr", "pp"):
         for r in db_conn.execute(
-            "SELECT m.* FROM measurements m "
-            "JOIN (SELECT station_id, MAX(ts) ts FROM measurements"
-            " WHERE ts >= ? AND ts <= ? GROUP BY station_id) latest "
+            f"SELECT m.station_id, m.ts, m.{col} value FROM measurements m "
+            f"JOIN (SELECT station_id, MAX(ts) ts FROM measurements"
+            f" WHERE {col} IS NOT NULL AND ts >= ? AND ts <= ? GROUP BY station_id) latest "
             "ON latest.station_id = m.station_id AND latest.ts = m.ts",
             (day_start.isoformat(), at.isoformat()),
-        )
-    }
+        ):
+            entry = result.setdefault(
+                r["station_id"], {"ts": r["ts"], "tt": None, "fx": None, "rr": None, "pp": None}
+            )
+            entry[col] = r["value"]
+            entry["ts"] = max(entry["ts"], r["ts"])
+    return result
 
 
 @app.get("/api/stations")

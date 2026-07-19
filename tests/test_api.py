@@ -43,6 +43,28 @@ def test_past_values_aggregation(tmp_path: Path):
     assert latest["00002"]["tt"] == 22.2
 
 
+def test_latest_measurements_per_param_lag(tmp_path: Path):
+    """DWD publishes the now-products with different latency: the newest row
+    can carry only rain/gust while temperature still ends 10 min earlier.
+    Each parameter must fall back to its own latest non-null value."""
+    from wetterrekord.app import latest_measurements
+
+    conn = db.connect(tmp_path / "test.sqlite")
+    rows = [
+        ("00001", "2026-07-08T11:50:00+02:00", 24.0, 12.0, 0.0, 1013.0),
+        # precip already published for 12:00, temperature/gust/pressure not yet
+        ("00001", "2026-07-08T12:00:00+02:00", None, None, 0.3, None),
+    ]
+    conn.executemany("INSERT INTO measurements VALUES (?,?,?,?,?,?)", rows)
+
+    latest = latest_measurements(conn, datetime(2026, 7, 8, 12, 5, tzinfo=TZ))
+    assert latest["00001"]["tt"] == 24.0
+    assert latest["00001"]["fx"] == 12.0
+    assert latest["00001"]["rr"] == 0.3
+    assert latest["00001"]["pp"] == 1013.0
+    assert latest["00001"]["ts"] == "2026-07-08T12:00:00+02:00"
+
+
 def test_api_stations_history_start(tmp_path: Path, monkeypatch):
     import wetterrekord.app as app_mod
 
