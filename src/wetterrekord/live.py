@@ -145,7 +145,7 @@ def poll_all(conn: sqlite3.Connection, client: DwdClient | None = None) -> None:
             sid = futures[future]
             try:
                 result = future.result()
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001 (isolate one bad station from the rest of the poll)
                 log.warning("Station %s: %s", sid, exc)
                 continue
             if result:

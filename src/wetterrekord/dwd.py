@@ -4,7 +4,7 @@ import io
 import re
 import zipfile
 from dataclasses import dataclass
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 from pathlib import Path
 
 import httpx
@@ -65,8 +65,8 @@ def parse_station_list(text: str) -> list[StationInfo]:
         stations.append(
             StationInfo(
                 id=m.group("id"),
-                von=datetime.strptime(m.group("von"), "%Y%m%d").date(),
-                bis=datetime.strptime(m.group("bis"), "%Y%m%d").date(),
+                von=datetime.strptime(m.group("von"), "%Y%m%d").date(),  # noqa: DTZ007 (date-only field)
+                bis=datetime.strptime(m.group("bis"), "%Y%m%d").date(),  # noqa: DTZ007 (date-only field)
                 altitude=int(m.group("alt")),
                 lat=float(m.group("lat")),
                 lon=float(m.group("lon")),
@@ -100,7 +100,7 @@ def parse_daily_kl(data: bytes) -> list[DailyValue]:
             continue
         values.append(
             DailyValue(
-                day=datetime.strptime(fields[i_date].strip(), "%Y%m%d").date(),
+                day=datetime.strptime(fields[i_date].strip(), "%Y%m%d").date(),  # noqa: DTZ007 (date-only field)
                 tmax=_field_value(fields, idx["TXK"]),
                 tmin=_field_value(fields, idx["TNK"]),
                 fx=_field_value(fields, idx["FX"]),
@@ -128,7 +128,7 @@ def parse_10min(data: bytes, columns: list[str]) -> list[tuple[datetime, tuple[f
         vals = tuple(_field_value(fields, i) for i in idx)
         if all(v is None for v in vals):
             continue
-        ts = datetime.strptime(fields[i_date].strip(), "%Y%m%d%H%M").replace(tzinfo=timezone.utc)
+        ts = datetime.strptime(fields[i_date].strip(), "%Y%m%d%H%M").replace(tzinfo=UTC)
         values.append((ts, vals))
     return values
 

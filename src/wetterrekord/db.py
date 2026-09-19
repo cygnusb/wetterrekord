@@ -127,7 +127,9 @@ def _migrate_pressure_to_sea_level(conn: sqlite3.Connection) -> None:
     """
     if conn.execute("PRAGMA user_version").fetchone()[0] >= 3:
         return
-    from .dwd import reduce_pressure  # local import: db must not depend on dwd at import time
+    from .dwd import (
+        reduce_pressure,  # local import: db must not depend on dwd at import time
+    )
 
     altitudes = {r["id"]: r["altitude"] for r in conn.execute("SELECT id, altitude FROM stations")}
     updates = []
