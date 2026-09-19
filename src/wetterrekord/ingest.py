@@ -11,7 +11,7 @@ import logging
 import sqlite3
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from datetime import date, datetime, timedelta
+from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
 from . import config, db
@@ -24,7 +24,7 @@ log = logging.getLogger(__name__)
 def select_stations(client: DwdClient) -> list[StationInfo]:
     """Active stations with live data and a sufficiently long history."""
     live_ids = {s.id for s in client.tu_now_stations()}
-    cutoff_active = date.today() - timedelta(days=14)
+    cutoff_active = datetime.now(ZoneInfo(config.LOCAL_TZ)).date() - timedelta(days=14)
     selected = []
     for s in client.kl_stations():
         if s.id not in live_ids:

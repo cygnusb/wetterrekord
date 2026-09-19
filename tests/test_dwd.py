@@ -1,4 +1,4 @@
-from datetime import date, timezone
+from datetime import UTC, date
 from pathlib import Path
 
 from wetterrekord.dwd import (
@@ -47,7 +47,7 @@ def test_parse_10min_now_zip():
     values = parse_10min(data, ["TT_10", "PP_10"])
     assert values
     ts, (tt, _pp) = values[0]
-    assert ts.tzinfo == timezone.utc
+    assert ts.tzinfo == UTC
     assert -60 < tt < 60
 
 
