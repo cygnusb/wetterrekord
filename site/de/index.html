@@ -1,0 +1,260 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      name="description"
+      content="wetterrekord.de — Live-Karte der Wetterrekorde in Deutschland. Vergleicht die heutigen Werte an über 330 DWD-Stationen mit Tages-, Halbmonats-, Monats- und Allzeitrekord. Open Source, mit Docker selbst betreibbar."
+    />
+    <meta name="theme-color" content="#0f1218" />
+    <link rel="canonical" href="https://cygnusb.github.io/wetterrekord/de/" />
+    <link rel="alternate" hreflang="en" href="https://cygnusb.github.io/wetterrekord/" />
+    <link rel="alternate" hreflang="de" href="https://cygnusb.github.io/wetterrekord/de/" />
+    <link rel="alternate" hreflang="x-default" href="https://cygnusb.github.io/wetterrekord/" />
+    <meta property="og:type" content="website" />
+    <meta property="og:locale" content="de_DE" />
+    <meta property="og:site_name" content="wetterrekord.de" />
+    <meta property="og:title" content="wetterrekord.de — Wetterrekorde Deutschland live" />
+    <meta
+      property="og:description"
+      content="Wie nah ist heute am Rekord? Live-Karte auf Basis der DWD-Open-Data, über 330 Stationen mit bis zu 245 Jahren Messreihe."
+    />
+    <meta property="og:url" content="https://cygnusb.github.io/wetterrekord/de/" />
+    <meta property="og:image" content="https://wetterrekord.de/og-image.png" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <link rel="icon" type="image/svg+xml" href="../assets/favicon.svg" />
+    <link rel="stylesheet" href="../styles.css" />
+    <title>wetterrekord.de — Wetterrekorde Deutschland live</title>
+  </head>
+  <body>
+    <header class="nav">
+      <div class="wrap nav-inner">
+        <a class="brand" href="./">
+          <img src="../assets/logo.svg" alt="" width="28" height="28" />
+          wetterrekord
+        </a>
+        <ul class="nav-links">
+          <li><a href="#records">Rekorde</a></li>
+          <li><a href="#how">So funktioniert’s</a></li>
+          <li><a href="#selfhost">Selbst betreiben</a></li>
+          <li><a href="https://github.com/cygnusb/wetterrekord">GitHub</a></li>
+          <li class="nav-keep">
+            <span class="lang" aria-label="Sprache">
+              <a href="../" hreflang="en" lang="en">EN</a><span aria-current="true">DE</span>
+            </span>
+          </li>
+          <li class="nav-keep"><a class="btn btn-primary" href="https://wetterrekord.de">Zur Karte</a></li>
+        </ul>
+      </div>
+    </header>
+
+    <main>
+      <section class="hero">
+        <div class="wrap hero-grid">
+          <div>
+            <div class="eyebrow">Nebenprojekt · DWD Open Data · Python</div>
+            <h1>Wie nah ist heute <em>am Rekord?</em></h1>
+            <p class="lede">
+              wetterrekord.de ist eine Live-Karte der Wetterrekorde in Deutschland. An über 330
+              Wetterstationen vergleicht sie die heutigen Werte mit der eigenen Geschichte der
+              Station — manche Messreihen reichen bis 1781 zurück.
+            </p>
+            <div class="btn-row">
+              <a class="btn btn-primary" href="https://wetterrekord.de">wetterrekord.de öffnen</a>
+              <a class="btn btn-ghost" href="https://github.com/cygnusb/wetterrekord">Auf GitHub ansehen</a>
+            </div>
+          </div>
+          <figure class="preview">
+            <a href="https://wetterrekord.de" aria-label="Live-Karte auf wetterrekord.de öffnen">
+              <img
+                src="https://wetterrekord.de/og-image.png"
+                alt="Heutige Rekordkarte Deutschlands, live erzeugt von wetterrekord.de"
+                width="1200"
+                height="630"
+                data-fallback="../assets/preview.png"
+                onerror="if(this.dataset.fallback){this.src=this.dataset.fallback;this.dataset.fallback='';}else{this.style.visibility='hidden';}"
+              />
+            </a>
+            <figcaption><span class="live-dot" aria-hidden="true"></span> Die Karte von heute, live erzeugt von wetterrekord.de</figcaption>
+          </figure>
+        </div>
+      </section>
+
+      <section id="records">
+        <div class="wrap">
+          <div class="section-head">
+            <h2>Vier Stufen von Rekord</h2>
+            <p>
+              Jede Station wird mit ihrem Rekord für denselben Kalendertag, den Halbmonat, den
+              Monat — und für alle Zeiten verglichen. Die Farbe zeigt, wie weit der heutige Tag
+              reicht.
+            </p>
+          </div>
+          <div class="scale" aria-label="Rekordstufen für Hitze und Kälte">
+            <div class="lvl h1">Tag<small>gleicher Kalendertag</small></div>
+            <div class="lvl h2">Halbmonat<small>1.–15. / 16.–Monatsende</small></div>
+            <div class="lvl h3">Monat<small>ganzer Kalendermonat</small></div>
+            <div class="lvl h4">Allzeit<small>Rekord der Station</small></div>
+            <div class="lvl c1">Tag<small>kältester an diesem Tag</small></div>
+            <div class="lvl c2">Halbmonat<small>kältester Halbmonat</small></div>
+            <div class="lvl c3">Monat<small>kältester Monat</small></div>
+            <div class="lvl c4">Allzeit<small>so kalt wie nie</small></div>
+          </div>
+          <p class="scale-note">
+            Berücksichtigt werden nur Stationen mit mindestens 30 Jahren Messhistorie für den
+            jeweiligen Wert — rund die Hälfte der Reihen beginnt vor 1950.
+          </p>
+
+          <div class="feature-grid" style="margin-top: 2rem">
+            <article class="feature">
+              <div class="icon icon-heat">🔥</div>
+              <h3>Hitze</h3>
+              <p>Das heutige Maximum gegen die Tmax-Rekorde der Station.</p>
+            </article>
+            <article class="feature">
+              <div class="icon icon-cold">❄️</div>
+              <h3>Kälte</h3>
+              <p>Das heutige Minimum gegen die Tmin-Rekorde der Station.</p>
+            </article>
+            <article class="feature">
+              <div class="icon icon-gust">💨</div>
+              <h3>Windböen</h3>
+              <p>Die stärkste Böe des Tages — Sturmrekorde pro Station.</p>
+            </article>
+            <article class="feature">
+              <div class="icon icon-rain">🌧️</div>
+              <h3>Niederschlag</h3>
+              <p>Die Tagessumme, die im Lauf des Tages aufläuft.</p>
+            </article>
+            <article class="feature">
+              <div class="icon icon-press">🌀</div>
+              <h3>Luftdruck</h3>
+              <p>Tagesmittel auf Meereshöhe — Hoch- und Tiefdruckrekorde, belastbar gegen Abend.</p>
+            </article>
+            <article class="feature">
+              <div class="icon">⏱</div>
+              <h3>Jetzt, Tabelle &amp; Rückblick</h3>
+              <p>
+                Ansicht „Jetzt“ mit den letzten 10-Minuten-Werten, sortierbare Tabelle, Filter
+                und eine Zeitleiste für bis zu 96 Stunden Rückblick.
+              </p>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section id="how">
+        <div class="wrap">
+          <div class="section-head">
+            <h2>So funktioniert’s</h2>
+            <p>
+              Komplett auf Basis des
+              <a href="https://opendata.dwd.de/climate_environment/CDC/">Climate Data Center</a>
+              des Deutschen Wetterdienstes. Inspiriert von
+              <a href="https://recordpy.fr">recordpy.fr</a>.
+            </p>
+          </div>
+          <div class="cards">
+            <article class="card">
+              <div class="num">1</div>
+              <h3>Historie importieren</h3>
+              <p>
+                Beim ersten Start werden rund 340 Stationsarchive mit Tageswerten geladen und
+                alle Rekorde in SQLite berechnet. Täglich um 04:30 neu berechnet.
+              </p>
+            </article>
+            <article class="card">
+              <div class="num">2</div>
+              <h3>Live-Werte abfragen</h3>
+              <p>
+                Alle 15 Minuten liefern die 10-Minuten-Daten des DWD das bisherige Maximum und
+                Minimum des Tages — mit etwa 30 Minuten Verzögerung.
+              </p>
+            </article>
+            <article class="card">
+              <div class="num">3</div>
+              <h3>Vergleichen und zeigen</h3>
+              <p>
+                FastAPI liefert den Vergleich an eine Leaflet-Karte; für Link-Vorschauen wird
+                serverseitig ein Bild des Tages erzeugt.
+              </p>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section id="selfhost">
+        <div class="wrap">
+          <div class="section-head">
+            <h2>Selbst betreiben</h2>
+            <p>Ein Container, ein Volume. Die Karte füllt sich, sobald der erste Import fertig ist.</p>
+          </div>
+          <div class="split">
+            <div class="quickstart">
+              <h3>Docker</h3>
+              <pre><code>git clone https://github.com/cygnusb/wetterrekord
+cd wetterrekord
+docker compose up -d</code></pre>
+              <p>
+                Danach <code>http://localhost:8000</code> öffnen. Images:
+                <code>ghcr.io/cygnusb/wetterrekord</code> und <code>cygnusbn/wetterrekord</code>.
+              </p>
+            </div>
+            <div class="quickstart">
+              <h3>Konfiguration</h3>
+              <table class="cfg">
+                <tr><td><code>WETTERREKORD_BASE_URL</code></td><td>öffentliche URL für Canonical-Links, Sitemap und Vorschaubilder</td></tr>
+                <tr><td><code>WETTERREKORD_LIVE_POLL_MINUTES</code></td><td>Abfrageintervall live (15)</td></tr>
+                <tr><td><code>WETTERREKORD_INGEST_HOUR</code></td><td>Stunde der täglichen Neuberechnung (4)</td></tr>
+                <tr><td><code>WETTERREKORD_IMPRINT_HTML</code></td><td>Impressum des Betreibers, aktiviert <code>/impressum</code></td></tr>
+              </table>
+            </div>
+          </div>
+          <div class="chips" aria-label="Technik">
+            <span class="chip">Python 3.14 · FastAPI</span>
+            <span class="chip">SQLite</span>
+            <span class="chip">APScheduler</span>
+            <span class="chip">Leaflet · OpenStreetMap</span>
+            <span class="chip">Pillow-Vorschaubilder</span>
+            <span class="chip">Docker</span>
+          </div>
+        </div>
+      </section>
+
+      <section class="cta">
+        <div class="wrap">
+          <h2>Fällt heute ein Rekord?</h2>
+          <p>Die Karte aktualisiert sich alle 15 Minuten — an heißen und kalten Tagen lohnt der Blick.</p>
+          <div class="btn-row">
+            <a class="btn btn-primary" href="https://wetterrekord.de">wetterrekord.de öffnen</a>
+            <a class="btn btn-ghost" href="https://github.com/cygnusb/wetterrekord">Quellcode auf GitHub</a>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer>
+      <div class="wrap">
+        <div class="footer-grid">
+          <div>
+            <strong>wetterrekord.de</strong> · ein Nebenprojekt von cygnusb ·
+            <a href="https://www.cygnusnetworks.de/">Cygnus Networks</a>
+          </div>
+          <div class="footer-links">
+            <a href="https://wetterrekord.de">Live-Karte</a>
+            <a href="https://github.com/cygnusb/wetterrekord">GitHub</a>
+            <a href="https://github.com/cygnusb/wetterrekord/releases">Releases</a>
+            <a href="../" hreflang="en" lang="en">English</a>
+          </div>
+        </div>
+        <p class="legal">
+          Datenbasis: Deutscher Wetterdienst, CDC Open Data, eigene Elemente ergänzt. Die
+          DWD-Daten stehen unter der
+          <a href="https://www.gesetze-im-internet.de/geonutzv/">GeoNutzV</a>. Das Vorschaubild
+          oben wird live von wetterrekord.de geladen.
+        </p>
+      </div>
+    </footer>
+  </body>
+</html>
