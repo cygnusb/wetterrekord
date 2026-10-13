@@ -65,8 +65,8 @@ def parse_station_list(text: str) -> list[StationInfo]:
         stations.append(
             StationInfo(
                 id=m.group("id"),
-                von=datetime.strptime(m.group("von"), "%Y%m%d").date(),  # noqa: DTZ007 (date-only field)
-                bis=datetime.strptime(m.group("bis"), "%Y%m%d").date(),  # noqa: DTZ007 (date-only field)
+                von=datetime.strptime(m.group("von"), "%Y%m%d").date(),
+                bis=datetime.strptime(m.group("bis"), "%Y%m%d").date(),
                 altitude=int(m.group("alt")),
                 lat=float(m.group("lat")),
                 lon=float(m.group("lon")),
@@ -100,7 +100,7 @@ def parse_daily_kl(data: bytes) -> list[DailyValue]:
             continue
         values.append(
             DailyValue(
-                day=datetime.strptime(fields[i_date].strip(), "%Y%m%d").date(),  # noqa: DTZ007 (date-only field)
+                day=datetime.strptime(fields[i_date].strip(), "%Y%m%d").date(),
                 tmax=_field_value(fields, idx["TXK"]),
                 tmin=_field_value(fields, idx["TNK"]),
                 fx=_field_value(fields, idx["FX"]),

@@ -1,0 +1,57 @@
+name: Project site (GitHub Pages)
+
+# Deploys the static landing page (English at /, German at /de/) to
+#   https://cygnusb.github.io/wetterrekord/
+#
+# Runs when the site changes on main, and on manual dispatch.
+# One-time setup: Settings → Pages → Source: "GitHub Actions".
+
+on:
+  push:
+    branches: [main]
+    paths: ["site/**", ".github/workflows/pages.yml"]
+  schedule:
+    - cron: "17 5 * * 1"   # weekly refresh of the fallback preview
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build site
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - name: Assemble Pages site
+        run: |
+          set -euo pipefail
+          rm -rf _site
+          cp -a site _site
+          # Fallback for the hero preview: today's share image, captured at
+          # deploy time. The page loads the live image and only falls back to
+          # this copy if wetterrekord.de is unreachable.
+          curl -fsSL --max-time 30 https://wetterrekord.de/og-image.png \
+            -o _site/assets/preview.png || echo "preview capture failed; continuing"
+          ls -laR _site
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    name: Deploy to Pages
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

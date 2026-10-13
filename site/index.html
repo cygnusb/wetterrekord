@@ -1,0 +1,258 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta
+      name="description"
+      content="wetterrekord.de — a live map of weather records in Germany. Compares today's values at 330+ DWD stations with each station's daily, half-month, monthly and all-time records. Open source, self-hostable with Docker."
+    />
+    <meta name="theme-color" content="#0f1218" />
+    <link rel="canonical" href="https://cygnusb.github.io/wetterrekord/" />
+    <link rel="alternate" hreflang="en" href="https://cygnusb.github.io/wetterrekord/" />
+    <link rel="alternate" hreflang="de" href="https://cygnusb.github.io/wetterrekord/de/" />
+    <link rel="alternate" hreflang="x-default" href="https://cygnusb.github.io/wetterrekord/" />
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="wetterrekord.de" />
+    <meta property="og:title" content="wetterrekord.de — weather records in Germany, live" />
+    <meta
+      property="og:description"
+      content="How close is today to the record? A live map built on DWD open data, comparing 330+ stations with up to 245 years of history."
+    />
+    <meta property="og:url" content="https://cygnusb.github.io/wetterrekord/" />
+    <meta property="og:image" content="https://wetterrekord.de/og-image.png" />
+    <meta name="twitter:card" content="summary_large_image" />
+    <link rel="icon" type="image/svg+xml" href="./assets/favicon.svg" />
+    <link rel="stylesheet" href="./styles.css" />
+    <title>wetterrekord.de — weather records in Germany, live</title>
+  </head>
+  <body>
+    <header class="nav">
+      <div class="wrap nav-inner">
+        <a class="brand" href="./">
+          <img src="./assets/logo.svg" alt="" width="28" height="28" />
+          wetterrekord
+        </a>
+        <ul class="nav-links">
+          <li><a href="#records">Records</a></li>
+          <li><a href="#how">How it works</a></li>
+          <li><a href="#selfhost">Self-host</a></li>
+          <li><a href="https://github.com/cygnusb/wetterrekord">GitHub</a></li>
+          <li class="nav-keep">
+            <span class="lang" aria-label="Language">
+              <span aria-current="true">EN</span><a href="./de/" hreflang="de" lang="de">DE</a>
+            </span>
+          </li>
+          <li class="nav-keep"><a class="btn btn-primary" href="https://wetterrekord.de">Open the map</a></li>
+        </ul>
+      </div>
+    </header>
+
+    <main>
+      <section class="hero">
+        <div class="wrap hero-grid">
+          <div>
+            <div class="eyebrow">Side project · DWD open data · Python</div>
+            <h1>How close is today to <em>the record?</em></h1>
+            <p class="lede">
+              wetterrekord.de is a live map of weather records in Germany. For more than 330
+              weather stations it compares today’s values with each station’s own history —
+              some series reach back to 1781.
+            </p>
+            <div class="btn-row">
+              <a class="btn btn-primary" href="https://wetterrekord.de">Open wetterrekord.de</a>
+              <a class="btn btn-ghost" href="https://github.com/cygnusb/wetterrekord">View on GitHub</a>
+            </div>
+          </div>
+          <figure class="preview">
+            <a href="https://wetterrekord.de" aria-label="Open the live map on wetterrekord.de">
+              <img
+                src="https://wetterrekord.de/og-image.png"
+                alt="Today's record map of Germany, rendered live by wetterrekord.de"
+                width="1200"
+                height="630"
+                data-fallback="./assets/preview.png"
+                onerror="if(this.dataset.fallback){this.src=this.dataset.fallback;this.dataset.fallback='';}else{this.style.visibility='hidden';}"
+              />
+            </a>
+            <figcaption><span class="live-dot" aria-hidden="true"></span> Today’s map, rendered live by wetterrekord.de</figcaption>
+          </figure>
+        </div>
+      </section>
+
+      <section id="records">
+        <div class="wrap">
+          <div class="section-head">
+            <h2>Four levels of record</h2>
+            <p>
+              Every station is checked against its record for the same calendar day, the
+              half-month, the month — and all time. The colour shows how far today goes.
+            </p>
+          </div>
+          <div class="scale" aria-label="Record levels for heat and cold">
+            <div class="lvl h1">Day<small>same calendar day</small></div>
+            <div class="lvl h2">Half-month<small>1st–15th / 16th–end</small></div>
+            <div class="lvl h3">Month<small>whole calendar month</small></div>
+            <div class="lvl h4">All-time<small>the station’s record</small></div>
+            <div class="lvl c1">Day<small>coldest on this day</small></div>
+            <div class="lvl c2">Half-month<small>coldest half-month</small></div>
+            <div class="lvl c3">Month<small>coldest month</small></div>
+            <div class="lvl c4">All-time<small>coldest ever</small></div>
+          </div>
+          <p class="scale-note">
+            Only stations with at least 30 years of history for a parameter take part —
+            about half of the series start before 1950.
+          </p>
+
+          <div class="feature-grid" style="margin-top: 2rem">
+            <article class="feature">
+              <div class="icon icon-heat">🔥</div>
+              <h3>Heat</h3>
+              <p>Today’s maximum temperature against the station’s Tmax records.</p>
+            </article>
+            <article class="feature">
+              <div class="icon icon-cold">❄️</div>
+              <h3>Cold</h3>
+              <p>Today’s minimum temperature against the station’s Tmin records.</p>
+            </article>
+            <article class="feature">
+              <div class="icon icon-gust">💨</div>
+              <h3>Wind gusts</h3>
+              <p>The strongest gust of the day — storm records per station.</p>
+            </article>
+            <article class="feature">
+              <div class="icon icon-rain">🌧️</div>
+              <h3>Precipitation</h3>
+              <p>The daily total, accumulating through the day.</p>
+            </article>
+            <article class="feature">
+              <div class="icon icon-press">🌀</div>
+              <h3>Air pressure</h3>
+              <p>Daily mean at sea level — highs and lows, meaningful towards evening.</p>
+            </article>
+            <article class="feature">
+              <div class="icon">⏱</div>
+              <h3>Now, table &amp; look-back</h3>
+              <p>
+                A “Now” view with the latest 10-minute values, a sortable table, filters and a
+                timeline to look back up to 96 hours.
+              </p>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section id="how">
+        <div class="wrap">
+          <div class="section-head">
+            <h2>How it works</h2>
+            <p>
+              Built entirely on the
+              <a href="https://opendata.dwd.de/climate_environment/CDC/">Climate Data Center</a>
+              of Deutscher Wetterdienst. Inspired by
+              <a href="https://recordpy.fr">recordpy.fr</a>.
+            </p>
+          </div>
+          <div class="cards">
+            <article class="card">
+              <div class="num">1</div>
+              <h3>Import the history</h3>
+              <p>
+                On first start, ~340 station archives of daily climate data are downloaded and
+                every record is computed into SQLite. Recomputed daily at 04:30.
+              </p>
+            </article>
+            <article class="card">
+              <div class="num">2</div>
+              <h3>Poll the live values</h3>
+              <p>
+                Every 15 minutes the DWD 10-minute observations give today’s max and min so
+                far — published with about 30 minutes of latency.
+              </p>
+            </article>
+            <article class="card">
+              <div class="num">3</div>
+              <h3>Compare and map</h3>
+              <p>
+                FastAPI serves the comparison to a Leaflet map; a share image of the day is
+                rendered on the server for every link preview.
+              </p>
+            </article>
+          </div>
+        </div>
+      </section>
+
+      <section id="selfhost">
+        <div class="wrap">
+          <div class="section-head">
+            <h2>Run your own</h2>
+            <p>One container, one volume. The map fills up once the first import is done.</p>
+          </div>
+          <div class="split">
+            <div class="quickstart">
+              <h3>Docker</h3>
+              <pre><code>git clone https://github.com/cygnusb/wetterrekord
+cd wetterrekord
+docker compose up -d</code></pre>
+              <p>
+                Then open <code>http://localhost:8000</code>. Images:
+                <code>ghcr.io/cygnusb/wetterrekord</code> and <code>cygnusbn/wetterrekord</code>.
+              </p>
+            </div>
+            <div class="quickstart">
+              <h3>Configuration</h3>
+              <table class="cfg">
+                <tr><td><code>WETTERREKORD_BASE_URL</code></td><td>public URL for canonical links, sitemap and share images</td></tr>
+                <tr><td><code>WETTERREKORD_LIVE_POLL_MINUTES</code></td><td>live poll interval (15)</td></tr>
+                <tr><td><code>WETTERREKORD_INGEST_HOUR</code></td><td>hour of the daily recomputation (4)</td></tr>
+                <tr><td><code>WETTERREKORD_IMPRINT_HTML</code></td><td>operator’s legal notice, enables <code>/impressum</code></td></tr>
+              </table>
+            </div>
+          </div>
+          <div class="chips" aria-label="Tech stack">
+            <span class="chip">Python 3.14 · FastAPI</span>
+            <span class="chip">SQLite</span>
+            <span class="chip">APScheduler</span>
+            <span class="chip">Leaflet · OpenStreetMap</span>
+            <span class="chip">Pillow share images</span>
+            <span class="chip">Docker</span>
+          </div>
+        </div>
+      </section>
+
+      <section class="cta">
+        <div class="wrap">
+          <h2>Is a record falling today?</h2>
+          <p>The map updates every 15 minutes — on hot and cold days it is worth a look.</p>
+          <div class="btn-row">
+            <a class="btn btn-primary" href="https://wetterrekord.de">Open wetterrekord.de</a>
+            <a class="btn btn-ghost" href="https://github.com/cygnusb/wetterrekord">Source on GitHub</a>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer>
+      <div class="wrap">
+        <div class="footer-grid">
+          <div>
+            <strong>wetterrekord.de</strong> · a side project by cygnusb ·
+            <a href="https://www.cygnusnetworks.de/">Cygnus Networks</a>
+          </div>
+          <div class="footer-links">
+            <a href="https://wetterrekord.de">Live map</a>
+            <a href="https://github.com/cygnusb/wetterrekord">GitHub</a>
+            <a href="https://github.com/cygnusb/wetterrekord/releases">Releases</a>
+            <a href="./de/" hreflang="de" lang="de">Deutsch</a>
+          </div>
+        </div>
+        <p class="legal">
+          Data source: Deutscher Wetterdienst (German Meteorological Service), CDC Open Data,
+          own elements added. The DWD data is provided under the
+          <a href="https://www.gesetze-im-internet.de/geonutzv/">GeoNutzV</a>. The preview image
+          above is loaded live from wetterrekord.de.
+        </p>
+      </div>
+    </footer>
+  </body>
+</html>
